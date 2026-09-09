@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Services.UPower
 import qs.Commons
+import qs.Ui as Ui
 Item {
     id: root
     property bool stateReady: false
@@ -14,9 +15,22 @@ Item {
     property string movement: "roam"
     property bool roomOpen: false
     property bool identityOpen: false
+    property bool awarenessOpen: false
+    property var awareness: ({settings:{enabled:false,titles:false,quiet_until:0},snapshot:{},minutes:{},events:[],reflections:[],error:""})
+    property var tools: []
+    property string awarenessDetail: ""
+    property string asideText: ""
+    property string asideBasis: ""
+    property bool asideVisible: false
+    property bool senseAllowed: stateReady && awareness.settings.enabled && !eco && !hidden && !dreaming && !presenceIdle.isIdle && motionClock>=awareness.settings.quiet_until*1000 && !busy && !choice.busy && !selfName.busy
+    property bool commentAllowed: senseAllowed && !opened && !roomOpen && !identityOpen && !awarenessOpen && !speaker.busy && !pending
+    onCommentAllowedChanged: if(!commentAllowed){reflection.cancel();asideVisible=false}
+    IdleMonitor {id:presenceIdle;timeout:180;respectInhibitors:false}
+
     property var dreamWindows: ({})
     property bool dreaming: Object.keys(dreamWindows).length>0
     Connections {target:Hyprland;function onRawEvent(event){
+        if(event.name==="activewindow" || event.name==="workspace") {reflection.cancel();root.asideVisible=false}
         if(event.name!=="openwindow" && event.name!=="closewindow")return
         var parts=event.parse?event.parse(event.name==="openwindow"?4:1):String(event.data).split(",")
         var next=Object.assign({},root.dreamWindows)
@@ -38,7 +52,7 @@ Item {
     property int pats: 0
     property double pauseUntil: 0
     property double motionClock: Date.now()
-    property bool wandering: stateReady && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
+    property bool wandering: stateReady && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !awarenessOpen && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
     function roomEvent(action,value) {if(!stateReady)return;roomCall.run(["room",action,value])}
     function headPat() {pats++;patTimer.restart();if(pats>=3){pats=0;patTimer.stop();mood="happy";pauseUntil=Date.now()+5000;roomEvent("pat","");celebrate.restart()}}
     property bool opened: false
@@ -47,7 +61,7 @@ Item {
     property real posX: 24
     property real posY: 70
     property string mood: "idle"
-    property string displayMood:listener.busy?"reading":actor.busy?"working":brain.busy||choice.busy||selfName.busy?"thinking":speaker.busy?"playing":mood
+    property string displayMood:listener.busy?"reading":actor.busy?"working":brain.busy||choice.busy||selfName.busy?"thinking":speaker.busy?"playing":mood!=="idle"?mood:senseAllowed && motionClock-(awareness.sampled||0)*1000<90000?({Maker:"working",Artist:"playing",Musician:"playing",Archivist:"reading"})[awareness.snapshot.category]||"idle":"idle"
     property string reply: "Hey, I’m Wisp. A little signal in your machine.\n\nAsk me something, or try ‘turn the volume down’."
     property string pending: ""
     property var growth: ({stage:"Spark",level:0,trait:"Maker",xp:0,next:24,traits:{},journal:[]})
@@ -72,10 +86,12 @@ Item {
         function reset(): void { root.posX=24; root.posY=70; root.hidden=false; root.persist() }
         function identity(): void {root.identityOpen=!root.identityOpen}
         function screensaver(): void {dream.running=true}
+        function tools(): void {root.awarenessOpen=true;senses.showTools=true;toolCall.run(["tools"])}
+        function awareness(): void {root.awarenessOpen=!root.awarenessOpen;senses.showTools=false;awarenessConfig.run(["awareness"])}
         function room(): void {root.roomOpen=!root.roomOpen}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.hidden=false;root.opened=true;root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null}) }
+        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,sampled:root.awareness.sampled||0}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.opened=!root.opened;root.persist()}}
@@ -104,19 +120,41 @@ Item {
     Call { id: growthCall; onReceived: function(d) {if(d.error)root.growthError=d.error;else {root.growth=d;root.growthError=""}} }
     Timer { interval:root.eco?1800000:600000; running:!root.busy; repeat:true; onTriggered:growthCall.run(["growth"]) }
     Call { id: saver }
+    Call {id:toolCall;onReceived:function(d){if(!d.error)root.tools=d.tools}}
+    Call {id:awarenessConfig;onReceived:function(d){if(d.error)root.awarenessDetail=d.error;else{root.awareness=d;root.awarenessDetail=""}}}
+    Call {id:observer;onReceived:function(d){
+        if(d.error){root.awarenessDetail=d.error;return}
+        root.awareness=d;if(d.growth)root.growth=d.growth;root.awarenessDetail=d.quiet||""
+        if(d.due && root.commentAllowed && !reflection.busy)reflection.run(["reflect"])
+    }}
+    Call {id:reflection;onReceived:function(d){
+        if(d.reflection && root.commentAllowed){root.asideText=d.reflection.text;root.asideBasis=d.reflection.basis;root.asideVisible=true;asideDismiss.restart();root.awareness=d.awareness}
+        else if(d.quiet)root.awarenessDetail=d.quiet
+    }}
+    Timer {interval:60000;running:root.senseAllowed;repeat:true;triggeredOnStart:true;onTriggered:if(!observer.busy)observer.run(["observe"])}
+    Timer {id:asideDismiss;interval:14000;onTriggered:root.asideVisible=false}
+    AwarenessPanel {
+        id:senses
+        visible:root.awarenessOpen && root.stateReady && !root.dreaming
+        state:root.awareness;tools:root.tools;busy:awarenessConfig.busy;pluggedIn:!root.eco;detail:root.awarenessDetail
+        onCloseRequested:root.awarenessOpen=false
+        onChange:function(setting,value){reflection.cancel();root.asideVisible=false;awarenessConfig.run(["awareness",setting,value])}
+        onPropose:function(action,label){root.awarenessOpen=false;root.opened=true;root.pending=action;root.reply="Ready: "+label+". Tap Run below."}
+    }
+
     Call {
         id: loader
         Component.onCompleted: run(["restore"])
         onReceived: function(d) {
             if (d.error) {root.restoreError=d.error;root.opened=true;return}
-            root.profile=d.profile;root.roomData=d.room;root.growth=d.growth
+            root.profile=d.profile;root.roomData=d.room;root.growth=d.growth;root.awareness=d.awareness
             var p=d.position
             root.posX=Number.isFinite(p.x)?p.x:24;root.posY=Number.isFinite(p.y)?p.y:70
             root.hidden=!!p.hidden;root.voice=!!p.voice;root.movement=p.movement||"roam"
             root.targetX=root.posX;root.targetY=root.posY
             root.reply=d.recovered.length ? "Recovered saved progress from a backup ("+d.recovered.join(", ")+").\n\n"+d.reply : d.reply
             root.restoreError="";root.stateReady=true
-            growthCall.run(["growth"])
+            growthCall.run(["growth"]);toolCall.run(["tools"])
         }
     }
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
@@ -133,8 +171,8 @@ Item {
         anchors { top: true; left: true }
         margins.left: Math.max(0,Math.min(root.posX,(screen?screen.width:1920)-implicitWidth))
         margins.top: Math.max(0,Math.min(root.posY,(screen?screen.height:1080)-implicitHeight))
-        implicitWidth: root.opened ? 360 : 128
-        implicitHeight: root.opened ? 520 : 128
+        implicitWidth: root.opened ? 360 : root.asideVisible ? 320 : 128
+        implicitHeight: root.opened ? 520 : root.asideVisible ? 280 : 128
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "pixel-spirit"
@@ -188,6 +226,16 @@ Item {
                 }
             }
         }
+        Ui.BorderSurface {
+            visible:root.asideVisible && !root.opened;y:125;width:320;height:asideColumn.implicitHeight+24
+            color:Color.popups.background;radius:Style.cornerRadius
+            borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)
+            Column {id:asideColumn;x:12;y:12;width:parent.width-24;spacing:6
+                Text {width:parent.width;text:root.profile.name+" · "+root.asideBasis;elide:Text.ElideRight;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.caption}
+                Text {width:parent.width;text:root.asideText;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;maximumLineCount:5;elide:Text.ElideRight}
+            }
+            MouseArea {anchors.fill:parent;onClicked:root.asideVisible=false}
+        }
         Rectangle {
             visible:root.opened; y:130; width:parent.width; height:386; radius:14
             color:Color.popups.background; border.color:Color.accent
@@ -197,7 +245,8 @@ Item {
                     spacing:8
                     Action {text:"Self";onClicked:root.identityOpen=!root.identityOpen}
                     Action {text:"Room";onClicked:root.roomOpen=!root.roomOpen}
-                    Text { text:root.profile.name; color:Color.accent; font.family:Style.fontFamily; font.bold:true; font.pixelSize:12; width:70;elide:Text.ElideRight; anchors.verticalCenter:parent.verticalCenter }
+                    Action {text:"Senses";onClicked:{root.awarenessOpen=!root.awarenessOpen;awarenessConfig.run(["awareness"])}}
+                    Text { text:root.profile.name; color:Color.accent; font.family:Style.fontFamily; font.bold:true; font.pixelSize:12; width:40;elide:Text.ElideRight; anchors.verticalCenter:parent.verticalCenter }
                     Action { text:"—"; onClicked:root.opened=false }
                     Action { text:"×"; onClicked:{root.hidden=true;root.opened=false;root.persist()} }
                 }

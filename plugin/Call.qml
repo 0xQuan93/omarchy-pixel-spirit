@@ -6,6 +6,10 @@ Item {
     property bool busy: proc.running
     property string pendingFrame: ""
     signal received(var data)
+    function cancel() {
+        pendingFrame = ""
+        proc.running = false
+    }
     function run(args) {
         if (proc.running) return
         // ASCII JSON gives an exact byte count, including escaped Unicode.

@@ -59,7 +59,7 @@ def evolve(old,snapshot,now=None):
   gain=min(points,max(0,24-daily))
   if gain:
    xp+=gain;daily+=gain;traits[trait]+=gain;journal.append({'at':now,'text':text,'xp':gain})
- return {'born':old['born'],'updated':now,'xp':xp,'traits':traits,'day':day,'daily':daily,'journal':journal[-60:],'snapshot':snapshot}
+ return old | {'born':old['born'],'updated':now,'xp':xp,'traits':traits,'day':day,'daily':daily,'journal':journal[-60:],'snapshot':snapshot}
 def view(state):
  xp=state['xp'];thresholds=[0,24,80,180];stages=['Spark','Sprout','Familiar','Guardian'];level=sum(xp>=n for n in thresholds)-1
  traits=state['traits'];dominant=max(traits,key=lambda k:traits[k]) if any(traits.values()) else 'Maker'
@@ -89,3 +89,37 @@ def memory_context(query):
   except OSError:pass
  state=get(STATE/'growth.json',{})
  return {'memory':chunks,'evolution':view(state) if state else None}
+
+def credit_presence(trait,seconds,observed_at):
+ # Sampled active use contributes gently; shares the ordinary daily XP cap.
+ if trait not in TYPES or not 0<seconds<=60:return None
+ STATE.mkdir(parents=True,exist_ok=True,mode=0o700)
+ with (STATE/'growth.lock').open('w') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  state=get(STATE/'growth.json',{})
+  if not state:return None
+  if observed_at<=state.get('presence_last',0):return view(state)
+  day=time.strftime('%Y-%m-%d',time.localtime(observed_at))
+  if state['day']!=day:state['day']=day;state['daily']=0
+  if state.get('presence_day')!=day:state['presence_day']=day;state['presence_daily']=0
+  totals=state.setdefault('presence_seconds',{})
+  before=totals.get(trait,0);totals[trait]=before+seconds
+  earned=int(totals[trait]//1800)-int(before//1800)
+  gain=min(earned,24-state['daily'],4-state['presence_daily'])
+  if gain>0:
+   state['xp']+=gain;state['daily']+=gain;state['presence_daily']+=gain;state['traits'][trait]+=gain
+   state['journal']=(state['journal']+[{'at':observed_at,'text':'Shared '+trait+' rhythm: 30 sampled active minutes.','xp':gain}])[-60:]
+  state['presence_last']=observed_at
+  # Preserve updated: it is the file scan cutoff, not the last persistence write.
+  put(STATE/'growth.json',state)
+  return view(state)
+
+def clear_presence():
+ STATE.mkdir(parents=True,exist_ok=True,mode=0o700)
+ with (STATE/'growth.lock').open('w') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  state=get(STATE/'growth.json',{})
+  if state:
+   state.pop('presence_seconds',None)
+   # Keep earned XP and daily caps: forgetting observations is not new activity.
+   put(STATE/'growth.json',state,preserve_previous=False)

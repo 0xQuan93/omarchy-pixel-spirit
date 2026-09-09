@@ -15,6 +15,10 @@ def validate(path, data, default):
     if not isinstance(data, type(default)):
         raise ValueError('Wrong state type')
     required = {
+        'awareness-settings.json': {'enabled': bool, 'titles': bool, 'quiet_until': (int,float)},
+        'awareness.json': {'sampled': (int,float), 'since': (int,float), 'snapshot': dict,
+                           'seconds': dict, 'events': list, 'reflections': list,
+                           'last_attempt': (int,float), 'last_key': str, 'error': str},
         'identity.json': {'name': str, 'seed': int, 'created': (int, float),
                           'class': str, 'interests': list, 'device': str, 'model': str},
         'growth.json': {'born': (int, float), 'updated': (int, float), 'xp': int,

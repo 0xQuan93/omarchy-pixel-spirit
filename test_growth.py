@@ -7,6 +7,26 @@ import growth as g
 def snapshot(files=None,repos=None):
  return {'files':files or {},'repos':repos or {},'counts':{k:0 for k in g.TYPES},'limited':False}
 class GrowthTests(unittest.TestCase):
+ def test_presence_is_deduplicated_capped_and_preserves_scan_cutoff(self):
+  with tempfile.TemporaryDirectory() as tmp,patch.object(g,'STATE',Path(tmp)):
+   state=g.evolve({},snapshot(),1000);g.put(Path(tmp)/'growth.json',state)
+   for n in range(1,181):
+    result=g.credit_presence('Artist',60,1000+n*60)
+   self.assertEqual(result['xp'],4)
+   self.assertEqual(g.credit_presence('Artist',60,11800)['xp'],4)
+   saved=g.get(Path(tmp)/'growth.json',{})
+   self.assertEqual(saved['updated'],1000)
+   self.assertEqual(saved['presence_seconds']['Artist'],10800)
+   changed=g.evolve(saved,snapshot({'new.py':[12000000000000,20,'Maker']}),13000)
+   self.assertEqual(changed['xp'],5)
+   self.assertEqual(changed['presence_seconds'],saved['presence_seconds'])
+ def test_presence_shares_file_growth_daily_cap(self):
+  with tempfile.TemporaryDirectory() as tmp,patch.object(g,'STATE',Path(tmp)):
+   state=g.evolve({},snapshot(),1000)
+   state.update(xp=24,daily=24,presence_seconds={'Maker':1740})
+   g.put(Path(tmp)/'growth.json',state)
+   self.assertEqual(g.credit_presence('Maker',60,1060)['xp'],24)
+   self.assertIsNone(g.credit_presence('Other',60,1120))
  def test_baseline_and_idempotence(self):
   snap=snapshot({'song.wav':[1,32,'Musician']});state=g.evolve({},snap,100)
   self.assertEqual(state['xp'],0)

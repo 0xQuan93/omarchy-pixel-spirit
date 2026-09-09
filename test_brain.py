@@ -12,19 +12,19 @@ class BrokerTests(unittest.TestCase):
     with self.assertRaises(ValueError):b.execute(action)
    run.assert_not_called()
  def test_action_uses_fixed_argv_and_reports_failure(self):
-  with patch.object(b,'run') as run:
+  with patch.object(b,'run') as run, patch.object(b.shutil,'which',return_value='/test/tool'):
    b.execute('volume_down');run.assert_called_once_with(b.ACTIONS['volume_down'])
-  with patch.object(b,'run',side_effect=RuntimeError('failed')):
+  with patch.object(b,'run',side_effect=RuntimeError('failed')), patch.object(b.shutil,'which',return_value='/test/tool'):
    with self.assertRaises(RuntimeError):b.execute('volume_down')
  def test_chat_is_proposal_and_battery_policy(self):
   response={'message':{'content':json.dumps({'text':'I can mute it.','emote':'working','action':'mute'})}}
-  with tempfile.TemporaryDirectory() as t, patch.object(b,'BASE',Path(t)), patch.object(b,'context',return_value={}), patch('identity.profile',return_value={'name':'Test','model':'qwen3.5:4b'}), patch.object(b.urllib.request,'urlopen') as url:
+  with tempfile.TemporaryDirectory() as t, patch.object(b,'BASE',Path(t)), patch.object(b,'context',return_value={}), patch('identity.profile',return_value={'name':'Test','model':'qwen3.5:4b'}), patch.object(b.urllib.request,'urlopen') as url, patch.object(b.shutil,'which',return_value='/test/tool'):
    url.return_value.__enter__.return_value.read.return_value=json.dumps(response).encode()
    with patch.object(b,'execute') as execute:
     result=b.chat('Would you help silence this machine?',True); execute.assert_not_called()
    payload=json.loads(url.call_args.args[0].data)
    self.assertEqual(payload['keep_alive'],0);self.assertEqual(payload['options']['num_thread'],2)
-   self.assertEqual(result['action'],'mute');self.assertEqual(len(b.read('history.json',[])),2)
+   self.assertEqual(result['action'],'mute');self.assertIn('Tap Run',result['text']);self.assertEqual(len(b.read('history.json',[])),2)
  def test_direct_commands_are_anchored(self):
   self.assertEqual(b.direct_action('Please turn the volume down.'),'volume_down')
   self.assertEqual(b.direct_action('pause music'),'pause_music')

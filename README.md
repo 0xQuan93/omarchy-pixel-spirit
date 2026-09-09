@@ -22,6 +22,16 @@ A native Omarchy companion that grows with the things you make. It roams your de
 
 ![Four lineages and sixteen forms](assets/lineages.png)
 
+## Shared life with your machine
+
+Open **Senses → Awareness** to opt in. Wisp samples the active app identity and workspace about once a minute while you are active and on external power. It remembers a bounded local activity diary and category-level sampled active time, and uses that context in chat. Existing project/file-change observations continue to shape evolution. Recognized creative-app use contributes 1 XP per 30 sampled active minutes, at most 4/day within the shared 24 XP daily cap; gaps are not backfilled. Categories are authored approximations, and uncategorized apps earn no activity XP. Expressions also respond to the sampled activity category.
+
+A settled moment can prompt one short aside from the selected local model, at most once every 20 minutes. The thought appears briefly beside Wisp without stealing keyboard focus or entering chat history. The Senses panel shows its app source and timestamp. These are model-written interpretations of metadata, not screen understanding or measurements of your feelings/productivity. No screenshots, typed text, clipboard, passive microphone, browser history or process command lines are collected. Optional window-title context is separately controlled and off by default. Hyprland returns a complete active-window record; unused fields (including titles in metadata-only mode) are discarded immediately, before persistence or model input.
+
+Ambient observation/generation pauses on battery, power saver, idle, lock, fullscreen, Do Not Disturb, quiet pause, hidden Wisp, or heavy CPU load. Unknown desktop/lock signals keep it quiet. Foreground chat cancels the ambient client; model calls share a lock, and background requests use two threads, a 30-second HTTP timeout and no model keep-alive. Results are discarded if power, consent or the foreground window changes. The shell suppresses asides during direct interaction with Wisp. Use **Pause 1h**, **Awareness off**, or **Forget observations and thoughts** whenever wanted. Forgetting clears the diary, reflections and activity aggregates (including backups), preserving earned identity/XP and daily reward limits.
+
+**Senses → Tools** exposes the actual fixed action catalogue and missing executables. Common supported requests route directly without relying on model judgment, while more varied language uses the catalogue in the model prompt. Tools still require Run and report their actual result; the model cannot execute arbitrary commands. Workspace navigation uses the current Omarchy/Hyprland Lua dispatch API. Media controls use Omarchy’s native media service and report unhandled actions; no playerctl dependency is needed. Obsidian and Do Not Disturb are included when available.
+
 ## Request privacy
 
 Wisp sends helper requests through an anonymous stdin pipe, never process arguments or environment variables. Each request is one newline-terminated JSON array, limited to 64 KiB including its delimiter. The helper rejects malformed frames, invalid command shapes, and legacy argv requests before dispatch. Chat, room notes, identity settings, speech, and saved state all use this channel; eSpeak also receives speech through stdin.
@@ -110,7 +120,7 @@ After upgrading an already-running development copy, run `omarchy restart shell`
 ## Data, capabilities, and cost
 
 - **Observation:** up to 16,000 entries, five directory levels and 32 repos per scan, with a four-second soft traversal budget; up to 1,000 shared-memory note metadata records. Dot directories, dependencies, builds, models, symlinks and this plugin’s source are excluded. Scans occur every ten minutes on AC, thirty on battery/power-saver; manual Growth scans have a one-minute minimum interval. Budget-limited scans are labelled.
-- **Evidence, not attribution:** file changes earn 1 XP, HEAD changes 3, upstream-ref changes 2, capped at 24/day. These observations can include pulls, checkouts, clones or collaborator work. Upstream changes do **not** prove a push. No background fetch occurs.
+- **Evidence, not attribution:** file changes earn 1 XP, HEAD changes 3, upstream-ref changes 2. Opt-in creative-app presence earns up to 4/day; all sources share a 24/day cap. These observations can include pulls, checkouts, clones or collaborator work. Upstream changes do **not** prove a push. No background fetch occurs.
 - **Memory for chat:** bounded excerpts from optional `MEMORY.md`, `USER.md`, `Soul.md`, up to two filename-matched session notes, recent evolution metadata and up to three short room-note excerpts. These go only to local Ollama as fallible, untrusted context. The plugin never writes to the shared vault.
 - **Controls:** explicit proposals for opening browser/terminal/files, volume, brightness, media playback, workspace navigation and power profiles. A Run button executes fixed argument lists. No arbitrary model-generated shell commands, deletion, publishing, or message sending.
 - **Private state:** `~/.local/state/pixel-spirit/` (or XDG state root) holds identity, position, room, recent chat and evolution metadata. Chat Clear preserves identity/growth. Empty shelf deletes room notes. Notes are limited to 12 × 4096 characters. Temporary audio is removed after transcription. Private requests travel over stdin, not process arguments.
@@ -128,6 +138,8 @@ omarchy shell pixel-spirit reset
 omarchy shell pixel-spirit identity
 omarchy shell pixel-spirit room
 omarchy shell pixel-spirit journal
+omarchy shell pixel-spirit awareness
+omarchy shell pixel-spirit tools
 omarchy shell pixel-spirit roam stay   # or roam / follow
 omarchy shell pixel-spirit screensaver
 omarchy shell pixel-spirit status
