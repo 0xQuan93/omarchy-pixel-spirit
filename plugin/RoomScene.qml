@@ -18,16 +18,16 @@ Item {
         width:640;height:360;scale:Math.min(scene.width/640,scene.height/360);transformOrigin:Item.TopLeft
         Rectangle {anchors.fill:parent;radius:12;color:scene.background;border.color:Qt.alpha(scene.accent,0.28)}
         Rectangle {x:1;y:1;width:638;height:240;radius:12;gradient:Gradient{GradientStop{position:0;color:Qt.alpha(scene.accent,0.14)}GradientStop{position:1;color:Qt.alpha(scene.accent,0.015)}}}
-        Repeater {model:9;Rectangle {required property int index;x:index*80;y:239;width:1;height:120;color:Qt.alpha(scene.accent,0.10)}}
-        Repeater {model:5;Rectangle {required property int index;x:0;y:240+index*28;width:640;height:1;color:Qt.alpha(scene.accent,0.13)}}
+        Repeater {model:5;Rectangle {required property int index;x:index*128;y:239;width:1;height:120;color:Qt.alpha(scene.accent,0.055)}}
+        Repeater {model:3;Rectangle {required property int index;x:0;y:240+index*42;width:640;height:1;color:Qt.alpha(scene.accent,0.07)}}
         Rectangle {x:40;y:28;width:188;height:168;radius:60;color:Qt.alpha(scene.accent,0.06);border.width:2;border.color:Qt.alpha(scene.accent,0.6)
             Rectangle {x:92;y:0;width:2;height:168;color:Qt.alpha(scene.accent,0.5)}
             Rectangle {x:0;y:82;width:188;height:2;color:Qt.alpha(scene.accent,0.5)}
             Rectangle {x:120;y:25;width:29;height:29;radius:15;color:scene.foreground;opacity:0.6}
-            Repeater {model:14;Rectangle{required property int index;x:12+(index*41)%160;y:12+(index*31)%140;width:2;height:2;color:scene.accent;opacity:0.3+(index%4)/6}}
+            Repeater {model:8;Rectangle{required property int index;x:12+(index*41)%160;y:12+(index*31)%140;width:2;height:2;color:scene.accent;opacity:0.3+(index%4)/6}}
         }
         Rectangle {x:330;y:52;width:239;height:113;radius:7;color:Qt.alpha(scene.accent,0.035);border.color:Qt.alpha(scene.accent,0.16)
-            Canvas {id:waveform;anchors.fill:parent;onPaint:{var c=getContext('2d');c.clearRect(0,0,width,height);c.strokeStyle=scene.accent.toString();c.globalAlpha=0.4;c.beginPath();for(var x=12;x<width-12;x++){var y=height/2+Math.sin(x/18)*Math.sin(x/61)*28;if(x===12)c.moveTo(x,y);else c.lineTo(x,y)}c.stroke()}}
+            Canvas {id:waveform;anchors.fill:parent;onPaint:{var c=getContext('2d');c.clearRect(0,0,width,height);c.strokeStyle=scene.accent.toString();c.globalAlpha=0.22;c.beginPath();for(var x=12;x<width-12;x++){var y=height/2+Math.sin(x/18)*Math.sin(x/61)*28;if(x===12)c.moveTo(x,y);else c.lineTo(x,y)}c.stroke()}}
         }
         Rectangle {x:384;y:199;width:198;height:9;color:Qt.alpha(scene.accent,0.55)}
         Repeater {model:Math.min(9,scene.roomState.notes.length+2);Rectangle {required property int index;x:401+index*17;y:164-index%3*7;width:11;height:35+index%3*7;color:Qt.alpha(scene.accent,0.35+index%4*0.12)}}

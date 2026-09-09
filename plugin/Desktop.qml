@@ -22,6 +22,8 @@ Item {
     property string asideText: ""
     property string asideBasis: ""
     property bool asideVisible: false
+    property bool asidePreview: false
+    property bool moreOpen: false
     property bool senseAllowed: stateReady && awareness.settings.enabled && !eco && !hidden && !dreaming && !presenceIdle.isIdle && motionClock>=awareness.settings.quiet_until*1000 && !busy && !choice.busy && !selfName.busy
     property bool commentAllowed: senseAllowed && !opened && !roomOpen && !identityOpen && !awarenessOpen && !speaker.busy && !pending
     onCommentAllowedChanged: if(!commentAllowed){reflection.cancel();asideVisible=false}
@@ -30,7 +32,7 @@ Item {
     property var dreamWindows: ({})
     property bool dreaming: Object.keys(dreamWindows).length>0
     Connections {target:Hyprland;function onRawEvent(event){
-        if(event.name==="activewindow" || event.name==="workspace") {reflection.cancel();root.asideVisible=false}
+        if((event.name==="activewindow" || event.name==="workspace") && !root.asidePreview) {reflection.cancel();root.asideVisible=false}
         if(event.name!=="openwindow" && event.name!=="closewindow")return
         var parts=event.parse?event.parse(event.name==="openwindow"?4:1):String(event.data).split(",")
         var next=Object.assign({},root.dreamWindows)
@@ -39,7 +41,7 @@ Item {
         root.dreamWindows=next
     }}
     property var profile: ({name:"Wisp",seed:0,device:"portable",class:"Auto",interests:[],model:"qwen3.5:4b"})
-    property string profileDetail: "Your imprint is local, editable, and yours."
+    property string profileDetail: ""
     property string family: {
         if(profile.class!=="Auto")return profile.class
         var scores=Object.assign({},growth.traits)
@@ -52,7 +54,7 @@ Item {
     property int pats: 0
     property double pauseUntil: 0
     property double motionClock: Date.now()
-    property bool wandering: stateReady && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !awarenessOpen && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
+    property bool wandering: stateReady && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !awarenessOpen && !asideVisible && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
     function roomEvent(action,value) {if(!stateReady)return;roomCall.run(["room",action,value])}
     function headPat() {pats++;patTimer.restart();if(pats>=3){pats=0;patTimer.stop();mood="happy";pauseUntil=Date.now()+5000;roomEvent("pat","");celebrate.restart()}}
     property bool opened: false
@@ -70,7 +72,22 @@ Item {
     property bool eco: UPower.onBattery || PowerProfiles.profile === PowerProfile.PowerSaver
     property bool busy: !stateReady || brain.busy || listener.busy || actor.busy
     function persist() { if(!stateReady)return; saver.run(["save", JSON.stringify({x:posX,y:posY,hidden:hidden,voice:voice,movement:movement})]) }
-    function toggle() { hidden=false; opened=!opened; persist() }
+    function showPanel(destination) {
+        asideVisible=false;moreOpen=false
+        opened=destination==="chat"
+        roomOpen=destination==="room"
+        identityOpen=destination==="self"
+        awarenessOpen=["thoughts","tools","settings"].indexOf(destination)>=0
+        if(destination)hidden=false
+        if(awarenessOpen){senses.page=destination;awarenessConfig.run(["awareness"])}
+        if(destination==="tools")toolCall.run(["tools"])
+    }
+    function previewBubble() {
+        showPanel("");asidePreview=true;asideBasis="Preview"
+        asideText="A little thought, right here beside me. Hover to linger, or click to let it go."
+        asideVisible=true;asideDismiss.restart()
+    }
+    function toggle() { showPanel(opened?"":"chat");persist() }
     function send() {
         if (busy || !field.text.trim()) return
         journalOpen=false; pending=""; mood="thinking"; reply="Following that thought…"
@@ -79,37 +96,41 @@ Item {
     IpcHandler {
         target: "pixel-spirit"
         function toggle(): void { root.toggle() }
-        function open(): void { root.hidden=false; root.opened=true; root.persist() }
-        function ask(message: string): void { root.hidden=false; root.opened=true; field.text=message; root.send() }
+        function open(): void { root.showPanel("chat");root.persist() }
+        function ask(message: string): void { root.showPanel("chat"); field.text=message; root.send() }
         function show(): void { root.hidden=false; root.persist() }
-        function hide(): void { root.hidden=true; root.opened=false; root.persist() }
+        function hide(): void { root.showPanel("");root.hidden=true;root.persist() }
         function reset(): void { root.posX=24; root.posY=70; root.hidden=false; root.persist() }
-        function identity(): void {root.identityOpen=!root.identityOpen}
-        function screensaver(): void {dream.running=true}
-        function tools(): void {root.awarenessOpen=true;senses.showTools=true;toolCall.run(["tools"])}
-        function awareness(): void {root.awarenessOpen=!root.awarenessOpen;senses.showTools=false;awarenessConfig.run(["awareness"])}
-        function room(): void {root.roomOpen=!root.roomOpen}
+        function identity(): void {root.showPanel(root.identityOpen?"":"self")}
+        function screensaver(): void {root.showPanel("");dream.running=true}
+        function tools(): void {root.showPanel("tools")}
+        function awareness(): void {root.showPanel(root.awarenessOpen?"":"thoughts")}
+        function settings(): void {root.showPanel("settings")}
+        function previewBubble(): void {root.previewBubble()}
+        function dismiss(): void {root.showPanel("");root.asideVisible=false}
+        function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
-        function journal(): void {root.hidden=false;root.opened=true;root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,sampled:root.awareness.sampled||0}) }
+        function journal(): void {root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
+        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,sampled:root.awareness.sampled||0}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
-    Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.opened=!root.opened;root.persist()}}
+    Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.toggle()}}
     Timer {id:celebrate;interval:4000;onTriggered:if(!root.busy)root.mood="idle"}
     Call {id:profileCall;onReceived:function(d){if(d.error)root.profileDetail=d.error;else{root.profile=d;root.profileDetail=d.avatarPath?"Portrait saved: "+d.avatarPath:"Identity saved."}}}
     Call {id:selfName;onReceived:function(d){if(d.error)root.profileDetail=d.error;else{root.profile=d;root.profileDetail="I chose "+d.name+". You can rename me any time."}}}
     Process {id:dream;command:["quickshell","-n","-p",Qt.resolvedUrl("Screensaver.qml").toString().replace("file://","")]}
     IdentityPanel {visible:root.stateReady && root.identityOpen && !root.dreaming;profile:root.profile;growth:root.growth;family:root.family;mood:root.displayMood;busy:selfName.busy||profileCall.busy;detail:root.profileDetail
-        onCloseRequested:root.identityOpen=false
+        onCloseRequested:{root.showPanel("");root.profileDetail=""}
+        onGrowthRequested:{root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
         onChange:function(setting,value){profileCall.run(["identity",setting,value])}
         onNameSelf:selfName.run(["name_self",root.eco?"eco":"normal"])
-        onScreensaver:{root.identityOpen=false;root.roomOpen=false;root.opened=false;dream.running=true}
+        onScreensaver:{root.showPanel("");dream.running=true}
     }
     Call {id:roomCall;onReceived:function(d){if(d.error){root.reply=d.error;root.roomData=Object.assign({},root.roomData,{message:d.error})}else root.roomData=d}}
     Call {id:choice;onReceived:function(d){if(d.error)root.roomData=Object.assign({},root.roomData,{message:d.error});else {root.roomData=d;root.mood=({rest:"sleeping",read:"reading",play:"playing",garden:"happy"})[d.activity]||"idle"}}}
     Timer {interval:root.eco?600000:180000;running:root.roomOpen && !root.busy && !choice.busy && !roomCall.busy;repeat:true;onTriggered:choice.run(["room_choose",root.eco?"eco":"normal","ambient"])}
     Room {visible:root.stateReady && root.roomOpen && !root.dreaming;profile:root.profile;family:root.family;roomState:root.roomData;growth:root.growth;eco:root.eco;busy:choice.busy||roomCall.busy;movement:root.movement
-        onCloseRequested:root.roomOpen=false
+        onCloseRequested:root.showPanel("")
         onInteract:function(action,value){root.roomEvent(action,value)}
         onChoose:choice.run(["room_choose",root.eco?"eco":"normal"])
         onMovementSelected:function(mode){root.movement=mode;root.pauseUntil=Date.now()+1000;root.persist()}
@@ -128,7 +149,7 @@ Item {
         if(d.due && root.commentAllowed && !reflection.busy)reflection.run(["reflect"])
     }}
     Call {id:reflection;onReceived:function(d){
-        if(d.reflection && root.commentAllowed){root.asideText=d.reflection.text;root.asideBasis=d.reflection.basis;root.asideVisible=true;asideDismiss.restart();root.awareness=d.awareness}
+        if(d.reflection && root.commentAllowed){root.asidePreview=false;root.asideText=d.reflection.text;root.asideBasis=d.reflection.basis;root.asideVisible=true;asideDismiss.restart();root.awareness=d.awareness}
         else if(d.quiet)root.awarenessDetail=d.quiet
     }}
     Timer {interval:60000;running:root.senseAllowed;repeat:true;triggeredOnStart:true;onTriggered:if(!observer.busy)observer.run(["observe"])}
@@ -137,9 +158,10 @@ Item {
         id:senses
         visible:root.awarenessOpen && root.stateReady && !root.dreaming
         state:root.awareness;tools:root.tools;busy:awarenessConfig.busy;pluggedIn:!root.eco;detail:root.awarenessDetail
-        onCloseRequested:root.awarenessOpen=false
+        onCloseRequested:root.showPanel("")
+        onPreviewBubble:root.previewBubble()
         onChange:function(setting,value){reflection.cancel();root.asideVisible=false;awarenessConfig.run(["awareness",setting,value])}
-        onPropose:function(action,label){root.awarenessOpen=false;root.opened=true;root.pending=action;root.reply="Ready: "+label+". Tap Run below."}
+        onPropose:function(action,label){root.showPanel("chat");root.journalOpen=false;root.pending=action;root.reply="Ready: "+label+". Tap Run below."}
     }
 
     Call {
@@ -171,8 +193,8 @@ Item {
         anchors { top: true; left: true }
         margins.left: Math.max(0,Math.min(root.posX,(screen?screen.width:1920)-implicitWidth))
         margins.top: Math.max(0,Math.min(root.posY,(screen?screen.height:1080)-implicitHeight))
-        implicitWidth: root.opened ? 360 : root.asideVisible ? 320 : 128
-        implicitHeight: root.opened ? 520 : root.asideVisible ? 280 : 128
+        implicitWidth: root.opened ? 360 : root.asideVisible ? 304 : 128
+        implicitHeight: root.opened ? 130+chatSurface.height : root.asideVisible ? 133+asideCard.height : 128
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "pixel-spirit"
@@ -194,14 +216,14 @@ Item {
                 onPressed: { root.pauseUntil=Date.now()+10000;originX=root.posX; originY=root.posY; located=false; travel=0; cursorPoll.running=true }
                 onReleased: function(m) {
                     if(travel<8) {
-                        if(m.button===Qt.RightButton) {root.hidden=true;root.opened=false}
+                        if(m.button===Qt.RightButton) {root.showPanel("");root.hidden=true}
                         else root.headPat()
                     }
                     root.persist()
                 }
                 onCanceled: root.persist()
             }
-            DropArea {anchors.fill:parent;onDropped:function(drop){if(drop.hasUrls){root.roomEvent("note",drop.urls[0].toString());root.roomOpen=true}else if(drop.hasText){root.roomEvent("note",drop.text);root.roomOpen=true}drop.acceptProposedAction()}}
+            DropArea {anchors.fill:parent;onDropped:function(drop){if(drop.hasUrls){root.roomEvent("note",drop.urls[0].toString());root.showPanel("room")}else if(drop.hasText){root.roomEvent("note",drop.text);root.showPanel("room")}drop.acceptProposedAction()}}
             Timer { interval:40; running:dragArea.pressed; repeat:true; onTriggered:if(!cursorPoll.running)cursorPoll.running=true }
             Process {
                 id:cursorPoll; command:["hyprctl","cursorpos","-j"]
@@ -226,56 +248,61 @@ Item {
                 }
             }
         }
+        SpeechBubble {
+            id:asideCard
+            visible:root.asideVisible && !root.opened;y:125;width:304;height:implicitHeight
+            name:root.profile.name;text:root.asideText;preview:root.asidePreview
+            onDismissed:root.asideVisible=false
+            onHovered:function(active){if(active)asideDismiss.stop();else if(root.asideVisible)asideDismiss.restart()}
+        }
         Ui.BorderSurface {
-            visible:root.asideVisible && !root.opened;y:125;width:320;height:asideColumn.implicitHeight+24
+            id:chatSurface
+            visible:root.opened;y:130;width:parent.width;height:chatContent.implicitHeight+32
             color:Color.popups.background;radius:Style.cornerRadius
             borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)
-            Column {id:asideColumn;x:12;y:12;width:parent.width-24;spacing:6
-                Text {width:parent.width;text:root.profile.name+" · "+root.asideBasis;elide:Text.ElideRight;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.caption}
-                Text {width:parent.width;text:root.asideText;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;maximumLineCount:5;elide:Text.ElideRight}
-            }
-            MouseArea {anchors.fill:parent;onClicked:root.asideVisible=false}
-        }
-        Rectangle {
-            visible:root.opened; y:130; width:parent.width; height:386; radius:14
-            color:Color.popups.background; border.color:Color.accent
             Column {
-                anchors.fill:parent; anchors.margins:16; spacing:10
+                id:chatContent;x:16;y:16;width:parent.width-32;spacing:10
                 Row {
-                    spacing:8
-                    Action {text:"Self";onClicked:root.identityOpen=!root.identityOpen}
-                    Action {text:"Room";onClicked:root.roomOpen=!root.roomOpen}
-                    Action {text:"Senses";onClicked:{root.awarenessOpen=!root.awarenessOpen;awarenessConfig.run(["awareness"])}}
-                    Text { text:root.profile.name; color:Color.accent; font.family:Style.fontFamily; font.bold:true; font.pixelSize:12; width:40;elide:Text.ElideRight; anchors.verticalCenter:parent.verticalCenter }
-                    Action { text:"—"; onClicked:root.opened=false }
-                    Action { text:"×"; onClicked:{root.hidden=true;root.opened=false;root.persist()} }
+                    width:parent.width;spacing:8
+                    Column {width:parent.width-64;spacing:4
+                        Text {width:parent.width;text:root.profile.name;elide:Text.ElideRight;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.title}
+                        Text {text:root.stateReady?root.growth.stage+" · "+root.growth.xp+" XP":"Restoring…";color:Color.foreground;opacity:0.5;font.family:Style.font.family;font.pixelSize:Style.font.caption}
+                    }
+                    Action {text:"Close";onClicked:root.showPanel("")}
                 }
-                Row {
-                    spacing:8
-                    Action { text:root.journalOpen?"Chat":"Growth"; onClicked:{root.journalOpen=!root.journalOpen;if(root.journalOpen)growthCall.run(["growth"])} }
-                    Text { anchors.verticalCenter:parent.verticalCenter; text:!root.stateReady?"Restoring saved companion…":root.growth.stage+" · "+root.growth.trait+" · "+root.growth.xp+(root.growth.next?"/"+root.growth.next:"")+" XP"; color:Color.accent; font.pixelSize:11; font.family:Style.fontFamily }
+                Row {spacing:6
+                    Action {text:"Chat";selected:!root.journalOpen;onClicked:{root.journalOpen=false;root.moreOpen=false}}
+                    Action {text:"Room";enabled:root.stateReady;onClicked:root.showPanel("room")}
+                    Action {text:"Self";enabled:root.stateReady;onClicked:root.showPanel("self")}
+                    Action {text:"More";selected:root.moreOpen;onClicked:root.moreOpen=!root.moreOpen}
+                }
+                Flow {
+                    visible:root.moreOpen;width:parent.width;spacing:4
+                    Action {text:"Thoughts";onClicked:root.showPanel("thoughts")}
+                    Action {text:"Tools";onClicked:root.showPanel("tools")}
+                    Action {text:"Settings";onClicked:root.showPanel("settings")}
+                    Action {text:"Growth";onClicked:{root.journalOpen=true;root.moreOpen=false;growthCall.run(["growth"])}}
+                    Action {text:root.voice?"Voice on":"Voice off";selected:root.voice;onClicked:{root.voice=!root.voice;root.moreOpen=false;root.persist()}}
+                    Action {text:"Clear chat";enabled:!root.busy;onClicked:{root.pending="";root.journalOpen=false;root.moreOpen=false;brain.run(["forget"])}}
+                    Action {text:"Hide";onClicked:{root.showPanel("");root.hidden=true;root.persist()}}
                 }
                 Flickable {
-                    width:parent.width; height:root.pending?96:128; contentHeight:answer.implicitHeight; clip:true
-                    boundsBehavior:Flickable.StopAtBounds
-                    Controls.ScrollBar.vertical: Controls.ScrollBar {}
-                    Text { id:answer; width:parent.width-8; text:!root.stateReady ? (root.restoreError || "Restoring your saved companion…") : root.journalOpen ? (root.growthError || "Your machine leaves a little of itself in me.\n\n"+Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")) : root.reply; textFormat:Text.PlainText; wrapMode:Text.Wrap; color:Color.popups.text; font.family:Style.fontFamily; font.pixelSize:13; lineHeight:1.2 }
+                    width:parent.width;height:root.journalOpen?180:130;contentHeight:answer.implicitHeight;clip:true
+                    boundsBehavior:Flickable.StopAtBounds;Controls.ScrollBar.vertical:Controls.ScrollBar {}
+                    Text {id:answer;width:parent.width-8;text:!root.stateReady?(root.restoreError||"Restoring your saved companion…"):root.journalOpen?(root.growthError||Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")):root.reply;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
                 }
-                Action { visible:!!root.pending; text:"Run · "+root.pending.replace(/_/g," "); enabled:!root.busy; onClicked:{root.mood="working";actor.run(["action",root.pending])} }
+                Action {visible:!!root.pending;text:"Run · "+root.pending.replace(/_/g," ");enabled:!root.busy;onClicked:{root.mood="working";actor.run(["action",root.pending])}}
                 Controls.TextField {
-                    id:field; width:parent.width; height:36; placeholderText:root.busy?"One moment…":"Talk to your machine…"; enabled:!root.busy
-                    color:Color.popups.text; placeholderTextColor:Qt.alpha(Color.popups.text,0.5); font.family:Style.fontFamily; selectByMouse:true
-                    background:Rectangle {radius:7;color:Qt.alpha(Color.accent,0.08);border.color:Color.popups.border}
-                    onAccepted:root.send(); Keys.onEscapePressed:root.opened=false
+                    id:field;width:parent.width;height:36;placeholderText:root.busy?"One moment…":"Talk to your companion…";enabled:!root.busy
+                    color:Color.foreground;placeholderTextColor:Qt.alpha(Color.foreground,0.5);font.family:Style.font.family;selectByMouse:true
+                    background:Ui.BorderSurface {radius:Style.cornerRadius;color:Qt.alpha(Color.accent,0.05);borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)}
+                    onAccepted:root.send();Keys.onEscapePressed:root.showPanel("")
                 }
-                Row {
-                    spacing:6
-                    Action { text:"Send"; enabled:!root.busy; onClicked:root.send() }
-                    Action { text:listener.busy?(root.micSeconds>0?"Mic · "+root.micSeconds+"s":"Decoding…"):"Mic · 7s"; enabled:!root.busy; onClicked:{root.micSeconds=7;root.mood="reading";root.reply="Listening now · speak for up to 7 seconds…";listener.run(["listen"])} }
-                    Action { text:root.voice?"Voice on":"Voice off"; onClicked:{root.voice=!root.voice;root.persist()} }
-                    Action { text:"Clear"; enabled:!root.busy; onClicked:{root.pending="";brain.run(["forget"])} }
+                Row {spacing:6
+                    Action {text:"Send";enabled:!root.busy;onClicked:root.send()}
+                    Action {text:listener.busy?(root.micSeconds>0?"Mic · "+root.micSeconds+"s":"Decoding…"):"Mic";tooltipText:"Record seven seconds of speech";enabled:!root.busy;onClicked:{root.micSeconds=7;root.mood="reading";root.reply="Listening now · speak for up to 7 seconds…";listener.run(["listen"])}}
+                    Text {text:root.eco?"Battery care":"Local AI";color:Color.foreground;opacity:0.45;font.family:Style.font.family;font.pixelSize:Style.font.caption;anchors.verticalCenter:parent.verticalCenter}
                 }
-                Text { text:root.eco?"Battery care · slow animation · model unloads after reply":"Local AI · drag to move · right-click to hide"; color:Color.popups.text; opacity:0.55; font.pixelSize:10 }
             }
         }
     }
