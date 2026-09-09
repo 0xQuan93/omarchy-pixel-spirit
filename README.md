@@ -22,6 +22,10 @@ A native Omarchy companion that grows with the things you make. It roams your de
 
 ![Four lineages and sixteen forms](assets/lineages.png)
 
+## Request privacy
+
+Wisp sends helper requests through an anonymous stdin pipe, never process arguments or environment variables. Each request is one newline-terminated JSON array, limited to 64 KiB including its delimiter. The helper rejects malformed frames, invalid command shapes, and legacy argv requests before dispatch. Chat, room notes, identity settings, speech, and saved state all use this channel; eSpeak also receives speech through stdin.
+
 ## Install
 
 Requires **Omarchy Quattro with shell plugins**, Quickshell with `FloatingWindow.fullscreen` and AppId support, and **Python 3.11+**. Hyprland supplies pointer coordinates. Core play, identity, and evolution work without Ollama or speech packages.

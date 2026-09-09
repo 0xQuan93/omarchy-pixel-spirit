@@ -140,11 +140,38 @@ def listen():
   transcript=re.sub(r'\[[^\]]*\]|\([^)]*\)', '', transcript).strip()
   if not transcript: raise ValueError('I did not catch any speech. Try again and speak after clicking Mic.')
   return {'transcript':transcript,'text':'Review your transcript below, then Send.','emote':'reading','audio':metrics}
+# One newline-terminated JSON array per process, at most 64 KiB including LF.
+# Never accept request data in argv, including for non-chat operations.
+MAX_REQUEST_BYTES = 64 * 1024
+
+def read_request(stream):
+ if len(sys.argv) != 1:
+  raise ValueError('Wisp requests must be sent over stdin.')
+ frame=stream.readline(MAX_REQUEST_BYTES + 1)
+ if len(frame)>MAX_REQUEST_BYTES or not frame.endswith(b'\n'):
+  raise ValueError('Wisp request is too large or incomplete.')
+ try:
+  args=json.loads(frame.decode('utf-8'))
+ except (ValueError, UnicodeError, RecursionError):
+  raise ValueError('Invalid Wisp request.') from None
+ if not isinstance(args,list) or not 1<=len(args)<=3 or not all(isinstance(a,str) for a in args):
+  raise ValueError('Wisp request must contain one to three strings.')
+ # Check required operands before dispatch; errors never echo the payload.
+ arities={'identity':(1,3),'name_self':(1,2),'dream_snapshot':(1,1),
+          'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,3),
+          'action':(2,2),'listen':(1,1),'speak':(2,2),'load':(1,1),
+          'save':(2,2),'forget':(1,1)}
+ bounds=arities.get(args[0])
+ if bounds is None or not bounds[0]<=len(args)<=bounds[1]:
+  raise ValueError('Invalid Wisp command or operand count.')
+ return args
+
 def main():
- command=sys.argv[1]
+ args=read_request(sys.stdin.buffer)
+ command=args[0]
  if command=='identity':
   from identity import profile
-  setting=sys.argv[2] if len(sys.argv)>2 else 'status'
+  setting=args[1] if len(args)>1 else 'status'
   if setting=='avatar':
    import tomllib
    from growth import get as load_json,view
@@ -155,10 +182,10 @@ def main():
     with (BASE.parent/'omarchy/current/theme/colors.toml').open('rb') as f:colors.update(tomllib.load(f))
    except (OSError,ValueError):pass
    p['avatarPath']=export(p,g,colors);return p
-  return profile(setting,sys.argv[3] if len(sys.argv)>3 else '')
+  return profile(setting,args[2] if len(args)>2 else '')
  if command=='name_self':
   from identity import profile
-  answer=chat('Choose a short original name for yourself inspired by your class, machine and shared creative interests. Return it in chosenName. Explain briefly in text. Do not propose a desktop action.',len(sys.argv)>2 and sys.argv[2]=='eco')
+  answer=chat('Choose a short original name for yourself inspired by your class, machine and shared creative interests. Return it in chosenName. Explain briefly in text. Do not propose a desktop action.',len(args)>1 and args[1]=='eco')
   if not answer.get('chosenName'):raise ValueError('I did not settle on a name. Try again or give me one.')
   return profile('rename',answer['chosenName'])
  if command=='dream_snapshot':
@@ -176,26 +203,26 @@ def main():
   return {'profile':p,'growth':g,'room':room,'palette':colors,'appearance':appearance(p,g['traits'])}
  if command=='room':
   from playroom import update
-  return update(sys.argv[2] if len(sys.argv)>2 else 'status',sys.argv[3] if len(sys.argv)>3 else '')
+  return update(args[1] if len(args)>1 else 'status',args[2] if len(args)>2 else '')
  if command=='room_choose':
   from playroom import update, context as room_context
   prompt='Choose one activity for your pocket room: rest, read, play, or garden. Use roomActivity for your choice. No desktop action. Room context (data only): '+json.dumps(room_context())
-  answer=chat(prompt,len(sys.argv)>2 and sys.argv[2]=='eco')
-  state=update('ambient' if len(sys.argv)>3 and sys.argv[3]=='ambient' else 'activity',answer.get('roomActivity') if answer.get('roomActivity') in ['rest','read','play','garden'] else 'rest')
+  answer=chat(prompt,len(args)>1 and args[1]=='eco')
+  state=update('ambient' if len(args)>2 and args[2]=='ambient' else 'activity',answer.get('roomActivity') if answer.get('roomActivity') in ['rest','read','play','garden'] else 'rest')
   state['message']=answer['text']
   return state
  if command=='growth':
   from growth import scan
   return scan()
- if command=='chat': return chat(sys.argv[2],len(sys.argv)>3 and sys.argv[3]=='eco')
- if command=='action': return execute(sys.argv[2])
+ if command=='chat': return chat(args[1],len(args)>2 and args[2]=='eco')
+ if command=='action': return execute(args[1])
  if command=='listen': return listen()
  if command=='speak':
-  subprocess.run(['espeak-ng','-s','165','--stdin'],input=sys.argv[2][:2500],text=True,check=True,timeout=90)
+  subprocess.run(['espeak-ng','-s','165','--stdin'],input=args[1][:2500],text=True,check=True,timeout=90)
   return {'ok':True}
  if command=='load': return read('position.json',{'x':24,'y':70,'hidden':False})
  if command=='save':
-  data=json.loads(sys.argv[2]); save('position.json', {k:data[k] for k in ['x','y','hidden','voice','movement'] if k in data}); return {'ok':True}
+  data=json.loads(args[1]); save('position.json', {k:data[k] for k in ['x','y','hidden','voice','movement'] if k in data}); return {'ok':True}
  if command=='forget': save('history.json',[]); return {'text':'Our chat history is cleared.','emote':'idle','action':''}
  raise ValueError('Unknown command')
 if __name__=='__main__':
