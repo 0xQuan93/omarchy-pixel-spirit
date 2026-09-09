@@ -13,12 +13,15 @@ if '--remove' in sys.argv:
  sys.exit()
 if target.exists() and not marker.exists():raise SystemExit('An existing idle clone needs a manual merge; no files changed.')
 if not target.exists():subprocess.run(['omarchy','plugin','clone','omarchy.idle'],check=True)
-service=target/'Service.qml';original=json.loads(marker.read_text())['original'] if marker.exists() else service.read_text()
+service=target/'Service.qml'
+if marker.exists() and service.read_text()!=json.loads(marker.read_text())['modified']:
+ raise SystemExit('Idle clone changed since integration; refusing to overwrite subsequent edits.')
+original=json.loads(marker.read_text())['original'] if marker.exists() else service.read_text()
 needle='|| omarchy-launch-screensaver'
 if original.count(needle)!=1:raise SystemExit('Idle launcher contract changed. No replacement made.')
 # The variable is expanded by bash at runtime; no username or checkout path is baked in.
 entry='plugin/Screensaver.qml' if (home/'.config/omarchy/plugins/oxquan.pixel-spirit/plugin/Screensaver.qml').exists() else 'Screensaver.qml'
-replacement='|| quickshell -n -d -p \\"$HOME/.config/omarchy/plugins/oxquan.pixel-spirit/'+entry+'\\"'
+replacement='|| { omarchy-toggle-enabled screensaver-off || quickshell -n -d -p \\"$HOME/.config/omarchy/plugins/oxquan.pixel-spirit/'+entry+'\\"; }'
 modified=original.replace(needle,replacement)
 if not marker.exists():shutil.copy2(service,target/('Service.qml.before-wisp-'+str(int(time.time()))))
 service.write_text(modified)

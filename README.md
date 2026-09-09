@@ -56,7 +56,7 @@ python3 ~/.config/omarchy/plugins/oxquan.pixel-spirit/setup_screensaver.py
 omarchy restart shell
 ```
 
-This explicitly clones the installed `omarchy.idle` service using Omarchy’s clone command, then changes only the clone’s screensaver launch command. It uses the existing `org.omarchy.screensaver` application ID, so Omarchy still observes window opening and dismissal. Lock timing, idle inhibitors and stay-awake settings remain under Omarchy’s idle service. It refuses to overwrite an unrelated existing idle clone. No packaged Omarchy files are changed.
+This explicitly clones the installed `omarchy.idle` service using Omarchy’s clone command, then changes only the clone’s screensaver launch command. It uses the existing `org.omarchy.screensaver` application ID, so Omarchy still observes window opening and dismissal. Lock timing, idle inhibitors, screensaver-off and stay-awake settings remain under Omarchy’s idle service. It refuses to overwrite an unrelated existing idle clone. No packaged Omarchy files are changed.
 
 The clone should be reviewed after Omarchy updates because it is a user-owned copy. Automatic triggering honors **Stay awake**: turn that mode off through Omarchy when you want normal idle screensaving. This is a screensaver, not a replacement lock screen.
 
