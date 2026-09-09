@@ -1,22 +1,12 @@
 """Bounded metadata observations, persistent evolution and relevant local memory."""
-import fcntl, json, math, os, subprocess, tempfile, time
+import fcntl, math, os, subprocess, time
 from pathlib import Path
 WORK=Path(os.environ.get('PIXEL_SPIRIT_WORK',str(Path.home()/'Work')))
 VAULT=Path(os.environ.get('PIXEL_SPIRIT_MEMORY',str(WORK/'Agent-Memory')))
 STATE=Path(os.environ.get('XDG_STATE_HOME',str(Path.home()/'.local/state')))/'pixel-spirit'
 SKIP={'node_modules','vendor','dist','build','target','models','venv','__pycache__','Agent-Memory','omarchy-pixel-spirit'}
 TYPES={'Maker':{'.py','.js','.ts','.tsx','.rs','.go','.c','.cpp','.qml','.sh'},'Artist':{'.svg','.png','.jpg','.webp','.kra','.blend','.xcf','.ora'},'Musician':{'.wav','.flac','.mp3','.ogg','.mid','.midi','.aup3','.ardour','.mmp','.als'},'Archivist':{'.md','.txt','.org','.pdf'}}
-def get(path,default):
- try:return json.loads(path.read_text())
- except (OSError,ValueError):return default
-def put(path,data):
- path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
- fd,tmp=tempfile.mkstemp(dir=path.parent)
- try:
-  with os.fdopen(fd,'w') as f:json.dump(data,f)
-  os.replace(tmp,path)
- finally:
-  if os.path.exists(tmp):os.unlink(tmp)
+from storage import get, put
 def git(path,ref):
  try:
   return subprocess.run(['git','--no-optional-locks','-C',str(path),'rev-parse','--verify',ref],capture_output=True,text=True,timeout=1,check=True).stdout.strip()

@@ -99,13 +99,21 @@ Stages unlock at **0 / 24 / 80 / 180 XP**. Random per-install markings persist a
 
 Default observation root is **`~/Work`**. Configure `PIXEL_SPIRIT_WORK` in the shell environment for another project folder; `PIXEL_SPIRIT_MEMORY` defaults to `<work>/Agent-Memory`. Without those folders the familiar still works and starts without a file-based imprint. Each installation uses only its own local state—no author memory or profile is shipped.
 
+## Persistence and recovery
+
+Identity (name, markings, age, class, influences and model), evolution XP/traits/journal, room bond/notes, recent conversation, and position/preferences survive shell restarts, reboots, and plugin upgrades in the user state directory. Startup restores saved state before showing a form or accepting changes; a failed restore shows an error and retries instead of displaying a fresh companion. The desktop, Self panel, room, portrait and screensaver use the same saved identity and evolution.
+
+Writes are atomic and flushed to disk, with a private `.bak` recovery copy. A damaged or missing primary file falls back to the last valid backup (which may be one save behind). If neither copy can be read, Wisp preserves the files and reports the problem instead of silently resetting. Explicit chat/shelf clearing also clears the corresponding backup contents. To carry a familiar to another machine, copy the entire `pixel-spirit` state directory while Wisp is stopped; state is local and does not automatically sync between machines.
+
+After upgrading an already-running development copy, run `omarchy restart shell` to clear cached QML components. A hot reload alone can mix an old helper caller with new Python code.
+
 ## Data, capabilities, and cost
 
 - **Observation:** up to 16,000 entries, five directory levels and 32 repos per scan, with a four-second soft traversal budget; up to 1,000 shared-memory note metadata records. Dot directories, dependencies, builds, models, symlinks and this plugin’s source are excluded. Scans occur every ten minutes on AC, thirty on battery/power-saver; manual Growth scans have a one-minute minimum interval. Budget-limited scans are labelled.
 - **Evidence, not attribution:** file changes earn 1 XP, HEAD changes 3, upstream-ref changes 2, capped at 24/day. These observations can include pulls, checkouts, clones or collaborator work. Upstream changes do **not** prove a push. No background fetch occurs.
 - **Memory for chat:** bounded excerpts from optional `MEMORY.md`, `USER.md`, `Soul.md`, up to two filename-matched session notes, recent evolution metadata and up to three short room-note excerpts. These go only to local Ollama as fallible, untrusted context. The plugin never writes to the shared vault.
 - **Controls:** explicit proposals for opening browser/terminal/files, volume, brightness, media playback, workspace navigation and power profiles. A Run button executes fixed argument lists. No arbitrary model-generated shell commands, deletion, publishing, or message sending.
-- **Private state:** `~/.local/state/pixel-spirit/` (or XDG state root) holds identity, position, room, recent chat and evolution metadata. Chat Clear preserves identity/growth. Empty shelf deletes room notes. Notes are limited to 12 × 4096 characters. Temporary audio is removed after transcription. Local helper arguments can be inspected by other processes under your account.
+- **Private state:** `~/.local/state/pixel-spirit/` (or XDG state root) holds identity, position, room, recent chat and evolution metadata. Chat Clear preserves identity/growth. Empty shelf deletes room notes. Notes are limited to 12 × 4096 characters. Temporary audio is removed after transcription. Private requests travel over stdin, not process arguments.
 - **Resources:** native rendering; short-lived Python helpers. AC motion ~30 Hz, battery ~10 Hz; sprite animation ~12.5 Hz, battery 4 Hz. Hidden animation stops. AI uses four threads on AC, two on battery/power-saver; keep-alive is two minutes AC and zero eco. Room AI chooses every three minutes AC / ten eco only while the room is open and otherwise idle. CPU inference can still take minutes and several GB of RAM. The dream room uses no AI inference.
 - **Displays:** roaming and interactive panels use the first display; the screensaver creates one fullscreen window per display. Physical multi-monitor behavior has not been tested on the author’s one-display setup.
 

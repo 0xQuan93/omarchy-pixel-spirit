@@ -8,6 +8,8 @@ import Quickshell.Services.UPower
 import qs.Commons
 Item {
     id: root
+    property bool stateReady: false
+    property string restoreError: ""
     property bool hidden: false
     property string movement: "roam"
     property bool roomOpen: false
@@ -36,8 +38,8 @@ Item {
     property int pats: 0
     property double pauseUntil: 0
     property double motionClock: Date.now()
-    property bool wandering: !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
-    function roomEvent(action,value) {roomCall.run(["room",action,value])}
+    property bool wandering: stateReady && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
+    function roomEvent(action,value) {if(!stateReady)return;roomCall.run(["room",action,value])}
     function headPat() {pats++;patTimer.restart();if(pats>=3){pats=0;patTimer.stop();mood="happy";pauseUntil=Date.now()+5000;roomEvent("pat","");celebrate.restart()}}
     property bool opened: false
     property bool voice: false
@@ -52,8 +54,8 @@ Item {
     property bool journalOpen: false
     property string growthError: ""
     property bool eco: UPower.onBattery || PowerProfiles.profile === PowerProfile.PowerSaver
-    property bool busy: brain.busy || listener.busy || actor.busy
-    function persist() { saver.run(["save", JSON.stringify({x:posX,y:posY,hidden:hidden,voice:voice,movement:movement})]) }
+    property bool busy: !stateReady || brain.busy || listener.busy || actor.busy
+    function persist() { if(!stateReady)return; saver.run(["save", JSON.stringify({x:posX,y:posY,hidden:hidden,voice:voice,movement:movement})]) }
     function toggle() { hidden=false; opened=!opened; persist() }
     function send() {
         if (busy || !field.text.trim()) return
@@ -73,24 +75,24 @@ Item {
         function room(): void {root.roomOpen=!root.roomOpen}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.hidden=false;root.opened=true;root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,stage:root.growth.stage,trait:root.growth.trait,xp:root.growth.xp}) }
+        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.opened=!root.opened;root.persist()}}
     Timer {id:celebrate;interval:4000;onTriggered:if(!root.busy)root.mood="idle"}
-    Call {id:profileCall;Component.onCompleted:run(["identity","status",""]);onReceived:function(d){if(d.error)root.profileDetail=d.error;else{root.profile=d;root.profileDetail=d.avatarPath?"Portrait saved: "+d.avatarPath:"Identity saved."}}}
+    Call {id:profileCall;onReceived:function(d){if(d.error)root.profileDetail=d.error;else{root.profile=d;root.profileDetail=d.avatarPath?"Portrait saved: "+d.avatarPath:"Identity saved."}}}
     Call {id:selfName;onReceived:function(d){if(d.error)root.profileDetail=d.error;else{root.profile=d;root.profileDetail="I chose "+d.name+". You can rename me any time."}}}
     Process {id:dream;command:["quickshell","-n","-p",Qt.resolvedUrl("Screensaver.qml").toString().replace("file://","")]}
-    IdentityPanel {visible:root.identityOpen && !root.dreaming;profile:root.profile;growth:root.growth;family:root.family;mood:root.displayMood;busy:selfName.busy||profileCall.busy;detail:root.profileDetail
+    IdentityPanel {visible:root.stateReady && root.identityOpen && !root.dreaming;profile:root.profile;growth:root.growth;family:root.family;mood:root.displayMood;busy:selfName.busy||profileCall.busy;detail:root.profileDetail
         onCloseRequested:root.identityOpen=false
         onChange:function(setting,value){profileCall.run(["identity",setting,value])}
         onNameSelf:selfName.run(["name_self",root.eco?"eco":"normal"])
         onScreensaver:{root.identityOpen=false;root.roomOpen=false;root.opened=false;dream.running=true}
     }
-    Call {id:roomCall;Component.onCompleted:run(["room","status",""]);onReceived:function(d){if(d.error){root.reply=d.error;root.roomData=Object.assign({},root.roomData,{message:d.error})}else root.roomData=d}}
+    Call {id:roomCall;onReceived:function(d){if(d.error){root.reply=d.error;root.roomData=Object.assign({},root.roomData,{message:d.error})}else root.roomData=d}}
     Call {id:choice;onReceived:function(d){if(d.error)root.roomData=Object.assign({},root.roomData,{message:d.error});else {root.roomData=d;root.mood=({rest:"sleeping",read:"reading",play:"playing",garden:"happy"})[d.activity]||"idle"}}}
     Timer {interval:root.eco?600000:180000;running:root.roomOpen && !root.busy && !choice.busy && !roomCall.busy;repeat:true;onTriggered:choice.run(["room_choose",root.eco?"eco":"normal","ambient"])}
-    Room {visible:root.roomOpen && !root.dreaming;profile:root.profile;family:root.family;roomState:root.roomData;growth:root.growth;eco:root.eco;busy:choice.busy||roomCall.busy;movement:root.movement
+    Room {visible:root.stateReady && root.roomOpen && !root.dreaming;profile:root.profile;family:root.family;roomState:root.roomData;growth:root.growth;eco:root.eco;busy:choice.busy||roomCall.busy;movement:root.movement
         onCloseRequested:root.roomOpen=false
         onInteract:function(action,value){root.roomEvent(action,value)}
         onChoose:choice.run(["room_choose",root.eco?"eco":"normal"])
@@ -99,10 +101,25 @@ Item {
     Timer {interval:root.eco?18000:9000;running:root.wandering && root.movement==="roam";repeat:true;triggeredOnStart:true;onTriggered:{root.targetX=24+Math.random()*Math.max(0,win.screen.width-176);root.targetY=40+Math.random()*Math.max(0,win.screen.height-200)}}
     Timer {interval:root.eco?100:33;running:root.wandering;repeat:true;onTriggered:{var dx=root.targetX-root.posX,dy=root.targetY-root.posY,dist=Math.sqrt(dx*dx+dy*dy);if(dist>3){var step=Math.min(dist,root.eco?5:4);root.posX+=dx/dist*step;root.posY+=dy/dist*step}}}
     Timer {interval:root.eco?1000:300;running:root.wandering && root.movement==="follow";repeat:true;triggeredOnStart:true;onTriggered:if(!cursorPoll.running)cursorPoll.running=true}
-    Call { id: growthCall; Component.onCompleted: run(["growth"]); onReceived: function(d) {if(d.error)root.growthError=d.error;else {root.growth=d;root.growthError=""}} }
+    Call { id: growthCall; onReceived: function(d) {if(d.error)root.growthError=d.error;else {root.growth=d;root.growthError=""}} }
     Timer { interval:root.eco?1800000:600000; running:!root.busy; repeat:true; onTriggered:growthCall.run(["growth"]) }
     Call { id: saver }
-    Call { id: loader; Component.onCompleted: run(["load"]); onReceived: function(d) { root.posX=Number(d.x)||24; root.posY=Number(d.y)||70; root.hidden=!!d.hidden; root.voice=!!d.voice;root.movement=d.movement||"roam";root.targetX=root.posX;root.targetY=root.posY } }
+    Call {
+        id: loader
+        Component.onCompleted: run(["restore"])
+        onReceived: function(d) {
+            if (d.error) {root.restoreError=d.error;root.opened=true;return}
+            root.profile=d.profile;root.roomData=d.room;root.growth=d.growth
+            var p=d.position
+            root.posX=Number.isFinite(p.x)?p.x:24;root.posY=Number.isFinite(p.y)?p.y:70
+            root.hidden=!!p.hidden;root.voice=!!p.voice;root.movement=p.movement||"roam"
+            root.targetX=root.posX;root.targetY=root.posY
+            root.reply=d.recovered.length ? "Recovered saved progress from a backup ("+d.recovered.join(", ")+").\n\n"+d.reply : d.reply
+            root.restoreError="";root.stateReady=true
+            growthCall.run(["growth"])
+        }
+    }
+    Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
     Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";reaction.restart(); if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
     Call { id: actor; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending="";reaction.restart() } }
@@ -125,7 +142,8 @@ Item {
         WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         Item {
             width:128; height:128
-            Spirit { anchors.top: parent.top; width:128; height:102; mood:root.displayMood; eco:root.eco; active:win.visible; stage:root.growth.level; trait:root.family;seed:root.profile.seed;device:root.profile.device;accent:Color.accent;foreground:Color.popups.text;background:Color.popups.background }
+            Spirit { visible:root.stateReady; anchors.top: parent.top; width:128; height:102; mood:root.displayMood; eco:root.eco; active:win.visible; stage:root.growth.level; trait:root.family;seed:root.profile.seed;device:root.profile.device;accent:Color.accent;foreground:Color.popups.text;background:Color.popups.background }
+            Rectangle {visible:!root.stateReady;anchors.centerIn:parent;width:44;height:44;radius:22;color:"transparent";border.width:2;border.color:Color.accent;opacity:0.6}
             MouseArea {
                 id: dragArea
                 anchors.fill:parent; hoverEnabled:true; acceptedButtons:Qt.LeftButton|Qt.RightButton; cursorShape:pressed?Qt.ClosedHandCursor:Qt.OpenHandCursor
@@ -186,13 +204,13 @@ Item {
                 Row {
                     spacing:8
                     Action { text:root.journalOpen?"Chat":"Growth"; onClicked:{root.journalOpen=!root.journalOpen;if(root.journalOpen)growthCall.run(["growth"])} }
-                    Text { anchors.verticalCenter:parent.verticalCenter; text:root.growth.stage+" · "+root.growth.trait+" · "+root.growth.xp+(root.growth.next?"/"+root.growth.next:"")+" XP"; color:Color.accent; font.pixelSize:11; font.family:Style.fontFamily }
+                    Text { anchors.verticalCenter:parent.verticalCenter; text:!root.stateReady?"Restoring saved companion…":root.growth.stage+" · "+root.growth.trait+" · "+root.growth.xp+(root.growth.next?"/"+root.growth.next:"")+" XP"; color:Color.accent; font.pixelSize:11; font.family:Style.fontFamily }
                 }
                 Flickable {
                     width:parent.width; height:root.pending?96:128; contentHeight:answer.implicitHeight; clip:true
                     boundsBehavior:Flickable.StopAtBounds
                     Controls.ScrollBar.vertical: Controls.ScrollBar {}
-                    Text { id:answer; width:parent.width-8; text:root.journalOpen ? (root.growthError || "Your machine leaves a little of itself in me.\n\n"+Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")) : root.reply; textFormat:Text.PlainText; wrapMode:Text.Wrap; color:Color.popups.text; font.family:Style.fontFamily; font.pixelSize:13; lineHeight:1.2 }
+                    Text { id:answer; width:parent.width-8; text:!root.stateReady ? (root.restoreError || "Restoring your saved companion…") : root.journalOpen ? (root.growthError || "Your machine leaves a little of itself in me.\n\n"+Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")) : root.reply; textFormat:Text.PlainText; wrapMode:Text.Wrap; color:Color.popups.text; font.family:Style.fontFamily; font.pixelSize:13; lineHeight:1.2 }
                 }
                 Action { visible:!!root.pending; text:"Run · "+root.pending.replace(/_/g," "); enabled:!root.busy; onClicked:{root.mood="working";actor.run(["action",root.pending])} }
                 Controls.TextField {

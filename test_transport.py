@@ -108,6 +108,7 @@ Scope {
     property string secret: "private-marker 雲 🌱\\nquotes \\\" \\\\ $(nope)"
     Call {
         id: call
+        Component.onCompleted: run(["chat", secret])
         onReceived: function(data) {
             if (step < 2 && (data.error || data.args[1] !== secret)) Qt.exit(1)
             if (step === 2 && !data.error) Qt.exit(2)
@@ -120,7 +121,6 @@ Scope {
         id: next; interval: 30
         onTriggered: call.run(["chat", step === 2 ? "x".repeat(65536) : secret])
     }
-    Component.onCompleted: next.start()
     Timer { interval: 8000; running: true; onTriggered: Qt.exit(3) }
 }
 ''')

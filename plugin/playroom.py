@@ -36,7 +36,7 @@ def update(command='status',value=''):
   elif command!='status':raise ValueError('Unknown room interaction')
   if reward and reward not in state['earned']:
    state['earned'].append(reward);state['bond']+=1
-  put(STATE/'room.json',state)
+  put(STATE/'room.json',state,preserve_previous=command!='clear_notes')
   return state
 
 def context():

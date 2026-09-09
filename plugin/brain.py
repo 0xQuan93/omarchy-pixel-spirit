@@ -28,16 +28,12 @@ EMOTES = ['idle','thinking','working','playing','reading','happy','sleeping']
 def run(args, timeout=8):
  return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=True).stdout.strip()
 def read(name, default):
- try: return json.loads((BASE/name).read_text())
- except (OSError, ValueError): return default
+ from storage import get
+ return get(BASE/name, default)
 def save(name, data):
- BASE.mkdir(parents=True, exist_ok=True, mode=0o700)
- fd, p = tempfile.mkstemp(dir=BASE)
- try:
-  with os.fdopen(fd,'w') as f: json.dump(data,f)
-  os.replace(p, BASE/name)
- finally:
-  if os.path.exists(p): os.unlink(p)
+ from storage import put
+ put(BASE/name, data, preserve_previous=bool(data))
+
 def execute(action):
  if action not in ACTIONS: raise ValueError('Unsupported desktop action')
  run(ACTIONS[action])
@@ -160,7 +156,7 @@ def read_request(stream):
  arities={'identity':(1,3),'name_self':(1,2),'dream_snapshot':(1,1),
           'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,3),
           'action':(2,2),'listen':(1,1),'speak':(2,2),'load':(1,1),
-          'save':(2,2),'forget':(1,1)}
+          'save':(2,2),'forget':(1,1),'restore':(1,1)}
  bounds=arities.get(args[0])
  if bounds is None or not bounds[0]<=len(args)<=bounds[1]:
   raise ValueError('Invalid Wisp command or operand count.')
@@ -169,6 +165,22 @@ def read_request(stream):
 def main():
  args=read_request(sys.stdin.buffer)
  command=args[0]
+ if command=='restore':
+  from identity import profile
+  from playroom import update
+  from growth import view, scan
+  from storage import RECOVERED
+  p=profile();room=update();saved=read('growth.json',{})
+  growth=view(saved) if saved else scan()
+  history=read('history.json',[])
+  reply='Welcome back. Our progress is saved on this machine.'
+  for item in reversed(history):
+   if item['role']=='assistant':
+    try:reply=json.loads(item['content'])['text']
+    except (ValueError,KeyError,TypeError):pass
+    break
+  return {'profile':p,'room':room,'growth':growth,'position':read('position.json',{}),
+          'reply':reply,'recovered':sorted(RECOVERED)}
  if command=='identity':
   from identity import profile
   setting=args[1] if len(args)>1 else 'status'
