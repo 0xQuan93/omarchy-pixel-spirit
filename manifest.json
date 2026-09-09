@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "oxquan.pixel-spirit",
+  "name": "Wisp \u00b7 Machine Familiar",
+  "version": "1.0.0",
+  "author": "0xQuan",
+  "description": "A personal, evolving local-AI companion with sixteen forms, a pocket room, voice, and a native dream-room screensaver.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "plugin/Desktop.qml",
+    "barWidget": "plugin/BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Wisp",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "left"
+  },
+  "homepage": "https://github.com/0xQuan93/omarchy-pixel-spirit",
+  "license": "MIT",
+  "icon": "assets/icon.png"
+}
