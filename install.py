@@ -23,6 +23,10 @@ if '--remove' not in sys.argv:
   if path.is_file():write(plugin/path.name,path.read_bytes())
  write(plugin/'setup_screensaver.py',(source/'setup_screensaver.py').read_bytes())
  write(plugin/'tools/fetch_voice_model.py',(source/'tools/fetch_voice_model.py').read_bytes())
+ local_manifest=json.loads((source/'manifest.json').read_text())
+ local_manifest['entryPoints']={key:value.removeprefix('plugin/') for key,value in local_manifest['entryPoints'].items()}
+ local_manifest.pop('icon',None)
+ write(plugin/'manifest.json',(json.dumps(local_manifest,indent=2)+'\n').encode())
  data['plugins'].append({'id':'oxquan.pixel-spirit'})
  data['bar']['layout']['left'].append({'id':'oxquan.pixel-spirit'})
  model=source/'models/ggml-tiny.en.bin'
