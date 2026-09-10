@@ -38,6 +38,20 @@ class AwarenessTests(unittest.TestCase):
             self.assertIn('battery', a.reflect()['quiet'])
             snap.assert_not_called()
 
+    def test_input_controls_persist_and_reuse_gate_without_observation(self):
+        with patch.object(a, 'gate') as gate:
+            self.assertFalse(a.input_gate()['allowed'])
+            gate.assert_not_called()
+        a.configure('mouse_gestures','on')
+        a.configure('activity_responses','on')
+        self.assertTrue(a.status()['settings']['mouse_gestures'])
+        with patch.object(a,'gate',return_value='Locked'), patch.object(a,'snapshot') as snap:
+            self.assertFalse(a.input_gate()['allowed'])
+            snap.assert_not_called()
+        with patch.object(a,'gate',return_value=''):
+            self.assertTrue(a.input_gate()['allowed'])
+        self.assertFalse((self.state/'awareness.json').exists())
+
     def test_lock_unknown_dnd_and_power_saver_are_quiet(self):
         settings = dict(a.defaults(), enabled=True)
         with patch.object(a, 'on_ac', return_value=True), patch.object(a.subprocess, 'run') as run, patch.object(a, 'output') as output:

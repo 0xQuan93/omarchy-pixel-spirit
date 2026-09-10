@@ -16,6 +16,11 @@ Item {
     property bool roomOpen: false
     property bool identityOpen: false
     property bool awarenessOpen: false
+    property bool remindersOpen: false
+    property string reminderDetail: ""
+    property var reminders: []
+    property var reminderDraft: ({minutes:"25",message:""})
+    property string inputMood: ""
     property var awareness: ({settings:{enabled:false,titles:false,quiet_until:0},snapshot:{},minutes:{},events:[],reflections:[],error:""})
     property var tools: []
     property string awarenessDetail: ""
@@ -25,9 +30,26 @@ Item {
     property bool asidePreview: false
     property bool moreOpen: false
     property bool senseAllowed: stateReady && awareness.settings.enabled && !eco && !hidden && !dreaming && !presenceIdle.isIdle && motionClock>=awareness.settings.quiet_until*1000 && !busy && !choice.busy && !selfName.busy
-    property bool commentAllowed: senseAllowed && !opened && !roomOpen && !identityOpen && !awarenessOpen && !speaker.busy && !pending
+    property bool commentAllowed: senseAllowed && !inputs.focused && !opened && !roomOpen && !identityOpen && !awarenessOpen && !remindersOpen && !speaker.busy && !pending
     onCommentAllowedChanged: if(!commentAllowed){reflection.cancel();asideVisible=false}
     IdleMonitor {id:presenceIdle;timeout:180;respectInhibitors:false}
+    InputSense {
+        id:inputs
+        enabled:root.stateReady && root.awareness.settings.enabled && (mouseGestures || activityResponses) && !root.eco && !root.hidden && root.motionClock>=root.awareness.settings.quiet_until*1000
+        mouseGestures:!!root.awareness.settings.mouse_gestures
+        activityResponses:!!root.awareness.settings.activity_responses
+        revision:root.awareness.settings.revision||0
+        blocked:root.dreaming || root.opened || root.roomOpen || root.identityOpen || root.awarenessOpen || root.remindersOpen || root.busy || root.choiceBusy || dragArea.pressed || !ToplevelManager.activeToplevel || ToplevelManager.activeToplevel.fullscreen
+        onWiggle:root.reactToInput("playing")
+        onWelcome:root.reactToInput("happy")
+        onAllowedChanged:if(!allowed){root.inputMood="";inputAnimation.stop();avatar.rotation=0;}
+    }
+    property bool choiceBusy: choice.busy || selfName.busy || speaker.busy
+    function reactToInput(emote) {
+        if(!inputs.allowed)return;
+        inputMood=emote;pauseUntil=Date.now()+4500;inputRest.restart();inputAnimation.restart();
+    }
+    Timer {id:inputRest;interval:4000;onTriggered:root.inputMood=""}
 
     property var dreamWindows: ({})
     property bool dreaming: Object.keys(dreamWindows).length>0
@@ -54,7 +76,7 @@ Item {
     property int pats: 0
     property double pauseUntil: 0
     property double motionClock: Date.now()
-    property bool wandering: stateReady && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !awarenessOpen && !asideVisible && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
+    property bool wandering: stateReady && !inputs.focused && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !awarenessOpen && !remindersOpen && !asideVisible && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
     function roomEvent(action,value) {if(!stateReady)return;roomCall.run(["room",action,value])}
     function headPat() {pats++;patTimer.restart();if(pats>=3){pats=0;patTimer.stop();mood="happy";pauseUntil=Date.now()+5000;roomEvent("pat","");celebrate.restart()}}
     property bool opened: false
@@ -63,7 +85,7 @@ Item {
     property real posX: 24
     property real posY: 70
     property string mood: "idle"
-    property string displayMood:listener.busy?"reading":actor.busy?"working":brain.busy||choice.busy||selfName.busy?"thinking":speaker.busy?"playing":mood!=="idle"?mood:senseAllowed && motionClock-(awareness.sampled||0)*1000<90000?({Maker:"working",Artist:"playing",Musician:"playing",Archivist:"reading"})[awareness.snapshot.category]||"idle":"idle"
+    property string displayMood:listener.busy?"reading":actor.busy?"working":brain.busy||choice.busy||selfName.busy?"thinking":speaker.busy?"playing":inputMood|| (mood!=="idle"?mood:senseAllowed && motionClock-(awareness.sampled||0)*1000<90000?({Maker:"working",Artist:"playing",Musician:"playing",Archivist:"reading"})[awareness.snapshot.category]||"idle":"idle")
     property string reply: "Hey, I’m Wisp. A little signal in your machine.\n\nAsk me something, or try ‘turn the volume down’."
     property string pending: ""
     property var growth: ({stage:"Spark",level:0,trait:"Maker",xp:0,next:24,traits:{},journal:[]})
@@ -77,10 +99,12 @@ Item {
         opened=destination==="chat"
         roomOpen=destination==="room"
         identityOpen=destination==="self"
+        remindersOpen=destination==="reminders"
         awarenessOpen=["thoughts","tools","settings"].indexOf(destination)>=0
         if(destination)hidden=false
         if(awarenessOpen){senses.page=destination;awarenessConfig.run(["awareness"])}
         if(destination==="tools")toolCall.run(["tools"])
+        if(remindersOpen)reminderList.run(["reminders"])
     }
     function previewBubble() {
         showPanel("");asidePreview=true;asideBasis="Preview"
@@ -106,12 +130,13 @@ Item {
         function tools(): void {root.showPanel("tools")}
         function awareness(): void {root.showPanel(root.awarenessOpen?"":"thoughts")}
         function settings(): void {root.showPanel("settings")}
+        function reminders(): void {root.showPanel("reminders")}
         function previewBubble(): void {root.previewBubble()}
         function dismiss(): void {root.showPanel("");root.asideVisible=false}
         function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,sampled:root.awareness.sampled||0}) }
+        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.toggle()}}
@@ -137,7 +162,7 @@ Item {
     }
     Timer {interval:root.eco?18000:9000;running:root.wandering && root.movement==="roam";repeat:true;triggeredOnStart:true;onTriggered:{root.targetX=24+Math.random()*Math.max(0,win.screen.width-176);root.targetY=40+Math.random()*Math.max(0,win.screen.height-200)}}
     Timer {interval:root.eco?100:33;running:root.wandering;repeat:true;onTriggered:{var dx=root.targetX-root.posX,dy=root.targetY-root.posY,dist=Math.sqrt(dx*dx+dy*dy);if(dist>3){var step=Math.min(dist,root.eco?5:4);root.posX+=dx/dist*step;root.posY+=dy/dist*step}}}
-    Timer {interval:root.eco?1000:300;running:root.wandering && root.movement==="follow";repeat:true;triggeredOnStart:true;onTriggered:if(!cursorPoll.running)cursorPoll.running=true}
+    Timer {interval:inputs.polling?150:root.eco?1000:300;running:inputs.polling || (root.wandering && root.movement==="follow");repeat:true;triggeredOnStart:true;onTriggered:if(!cursorPoll.running)cursorPoll.running=true}
     Call { id: growthCall; onReceived: function(d) {if(d.error)root.growthError=d.error;else {root.growth=d;root.growthError=""}} }
     Timer { interval:root.eco?1800000:600000; running:!root.busy; repeat:true; onTriggered:growthCall.run(["growth"]) }
     Call { id: saver }
@@ -158,10 +183,23 @@ Item {
         id:senses
         visible:root.awarenessOpen && root.stateReady && !root.dreaming
         state:root.awareness;tools:root.tools;busy:awarenessConfig.busy;pluggedIn:!root.eco;detail:root.awarenessDetail
+        inputSummary:inputs.summary
         onCloseRequested:root.showPanel("")
         onPreviewBubble:root.previewBubble()
         onChange:function(setting,value){reflection.cancel();root.asideVisible=false;awarenessConfig.run(["awareness",setting,value])}
         onPropose:function(action,label){root.showPanel("chat");root.journalOpen=false;root.pending=action;root.reply="Ready: "+label+". Tap Run below."}
+    }
+
+    Call {id:reminderList;onReceived:function(d){if(d.error)root.reminderDetail=d.error;else root.reminders=d.reminders||[];}}
+    Call {id:reminderAction;onReceived:function(d){root.reminderDetail=d.error||d.text||"";reminderList.run(["reminders"]);}}
+    Timer {interval:10000;running:root.remindersOpen;repeat:true;onTriggered:reminderList.run(["reminders"])}
+    RemindersPanel {
+        visible:root.remindersOpen && root.stateReady && !root.dreaming
+        reminders:root.reminders;detail:root.reminderDetail;busy:reminderAction.busy
+        draft:root.reminderDraft
+        onCloseRequested:root.showPanel("")
+        onCreate:function(minutes,message){reminderAction.run(["remind",minutes,message]);}
+        onCancel:function(unit){reminderAction.run(["cancel_reminder",unit]);}
     }
 
     Call {
@@ -181,7 +219,7 @@ Item {
     }
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
-    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";reaction.restart(); if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
+    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
     Call { id: actor; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending="";reaction.restart() } }
     Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.reply="Transcribing your recording locally…" } }
     Call { id: listener; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
@@ -202,7 +240,13 @@ Item {
         WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         Item {
             width:128; height:128
-            Spirit { visible:root.stateReady; anchors.top: parent.top; width:128; height:102; mood:root.displayMood; eco:root.eco; active:win.visible; stage:root.growth.level; trait:root.family;seed:root.profile.seed;device:root.profile.device;accent:Color.accent;foreground:Color.popups.text;background:Color.popups.background }
+            Spirit { id:avatar; visible:root.stateReady; anchors.top: parent.top; width:128; height:102; mood:root.displayMood; eco:root.eco; active:win.visible; stage:root.growth.level; trait:root.family;seed:root.profile.seed;device:root.profile.device;accent:Color.accent;foreground:Color.popups.text;background:Color.popups.background }
+            SequentialAnimation {
+                id:inputAnimation
+                NumberAnimation {target:avatar;property:"rotation";from:0;to:-10;duration:120}
+                NumberAnimation {target:avatar;property:"rotation";to:10;duration:180}
+                NumberAnimation {target:avatar;property:"rotation";to:0;duration:120}
+            }
             Rectangle {visible:!root.stateReady;anchors.centerIn:parent;width:44;height:44;radius:22;color:"transparent";border.width:2;border.color:Color.accent;opacity:0.6}
             MouseArea {
                 id: dragArea
@@ -231,6 +275,7 @@ Item {
                     onStreamFinished: {
                         try {
                             var p=JSON.parse(text)
+                            inputs.pointer(p.x,p.y,!dragArea.pressed && Math.hypot(p.x-(win.screen.x+win.margins.left+64),p.y-(win.screen.y+win.margins.top+64))<=260)
                             if(!dragArea.pressed) {
                                 if(root.movement==="follow" && root.wandering) {
                                     root.targetX=Math.max(0,Math.min(p.x-win.screen.x+90,win.screen.width-128))
@@ -281,6 +326,7 @@ Item {
                     Action {text:"Thoughts";onClicked:root.showPanel("thoughts")}
                     Action {text:"Tools";onClicked:root.showPanel("tools")}
                     Action {text:"Settings";onClicked:root.showPanel("settings")}
+                    Action {text:"Timers / Reminders";onClicked:root.showPanel("reminders")}
                     Action {text:"Growth";onClicked:{root.journalOpen=true;root.moreOpen=false;growthCall.run(["growth"])}}
                     Action {text:root.voice?"Voice on":"Voice off";selected:root.voice;onClicked:{root.voice=!root.voice;root.moreOpen=false;root.persist()}}
                     Action {text:"Clear chat";enabled:!root.busy;onClicked:{root.pending="";root.journalOpen=false;root.moreOpen=false;brain.run(["forget"])}}

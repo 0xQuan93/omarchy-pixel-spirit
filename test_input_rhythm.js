@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const r = vm.createContext({});
+vm.runInContext(fs.readFileSync(__dirname+'/plugin/InputRhythm.js', 'utf8'), r);
+function path(xs, near=true, state=r.newMotion(), start=1000) {
+    return xs.map((x,i)=>r.sample(state,x,100,start+i*150,near));
+}
+assert.equal(path([0,90,0,90,0]).filter(Boolean).length, 1);
+assert.equal(path([0,40,80,120,160,200]).some(Boolean), false, 'ordinary sweep');
+assert.equal(path([0,2,0,3,0,2,0]).some(Boolean), false, 'jitter');
+assert.equal(path([0,90,0,90,0], false).some(Boolean), false, 'far from Wisp');
+assert.equal(path([0,900,0,900,0]).some(Boolean), false, 'monitor jumps');
+let m=r.newMotion();
+path([0,90,0,90,0],true,m);
+assert.equal(path([0,90,0,90,0],true,m,2500).some(Boolean),false,'cooldown');
+assert.equal(path([0,90,0,90,0],true,m,23000).some(Boolean),true,'cooldown expires');
+for(let i=0;i<1000;i++)r.sample(m,0,0,25000+i*150,true);
+assert.ok(m.points.length<=14,'bounded memory');
+let a=r.newActivity();
+assert.equal(r.activity(a,1000,false,false).welcome,false,'no startup greeting');
+for(let t=2000;t<=46000;t+=1000)r.activity(a,t,false,false);
+assert.equal(r.activity(a,47000,false,false).focused,true,'sustained activity');
+assert.equal(r.activity(a,48000,true,false).focused,false,'pause clears focus');
+r.activity(a,108000,true,true);
+assert.equal(r.activity(a,109000,false,false).welcome,true,'return greeting');
+assert.equal(r.activity(a,110000,false,false).welcome,false,'one greeting per return');
+r.activity(a,180000,true,true);
+assert.equal(r.activity(a,181000,false,false).welcome,false,'welcome cooldown');
+a=r.newActivity();
+r.activity(a,0,false,false);
+assert.equal(r.activity(a,50000,false,false).focused,false,'no backfilled gaps');
+r.activity(a,51000,true,true);r.pauseActivity(a);
+assert.equal(r.activity(a,200000,false,false).welcome,true,'away survives temporary blocking');
+console.log('Input rhythm: gesture, cooldown, bounds, activity, return and gap tests passed');

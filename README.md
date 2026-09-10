@@ -32,6 +32,25 @@ Ambient observation/generation pauses on battery, power saver, idle, lock, fulls
 
 **More → Tools** exposes the actual fixed action catalogue and missing executables. Common supported requests route directly without relying on model judgment, while more varied language uses the catalogue in the model prompt. Tools still require Run and report their actual result; the model cannot execute arbitrary commands. Workspace navigation uses the current Omarchy/Hyprland Lua dispatch API. Media controls use Omarchy’s native media service and report unhandled actions; no playerctl dependency is needed. Obsidian and Do Not Disturb are included when available.
 
+## Mouse, activity and reminders
+
+### Mouse and activity responses (1.2)
+
+**More → Settings → Mouse and activity responses** has two independent opt-ins. Both require Awareness on and external power; new installations default to off.
+
+- **Mouse gestures:** wiggle the pointer beside Wisp (within 260 logical pixels). Several substantial direction changes within 1.8 seconds produce a short playful tilt and expression, with a 20-second cooldown. Ordinary sweeps, tiny jitter and large monitor jumps are rejected. Reuses the existing cursor helper at most every 150 ms while active; it does not interfere with dragging or enable Follow mode.
+- **Activity responses:** after 45 seconds without a 12-second input pause, Wisp stops roaming and suppresses casual AI asides. A pause releases that quiet state. Returning after an observed minute of idle can produce a happy tilt, at most once every five minutes. This is general input activity, not typing detection, emotion inference, or a productivity score.
+
+These responses are authored animations: no model requests, XP rewards, saved input history, or keystroke capture. The gesture buffer contains at most 14 coordinate samples from the last 1.8 seconds; general activity timers remain only in memory. Disabling awareness, turning off the feature, hiding Wisp, quiet pause, or battery mode clears the relevant transient state. Fullscreen, open companion panels, and busy operations suspend reactions. A read-only desktop check samples lock, DND and load every five seconds; results expire after eight seconds and unknown signals keep responses quiet. Idle notifications alone do not reveal what was typed.
+
+### Timers and reminders (1.2)
+
+Open **More → Timers / Reminders**, choose 1–1440 minutes, optionally enter a message, and select **Set reminder**. Presets, a live countdown, and individual cancellation are included. The upcoming list shows Omarchy reminders on this desktop, including ones created elsewhere.
+
+Chat recognizes explicit requests such as **“remind me in 10 minutes to check the oven”** or **“set a timer for 25 minutes”** and opens a prefilled form for review. This routing does not use a model or schedule anything until Set reminder is selected. “Show my reminders” proposes the reminder panel through the usual Run control. Dates, recurring reminders, and arbitrary time phrases are not parsed.
+
+Omarchy's existing systemd user timers deliver the desktop notification independently of Wisp, including while Wisp is hidden or reloaded. Timers last for the login session and are not reboot-persistent. Timing follows native systemd scheduling accuracy; notifications honor Omarchy's DND behavior. Reminder messages are handed to the native reminder command and stored in its runtime message files until delivery or cancellation. No additional reminder daemon is installed.
+
 ## A quieter companion UI
 
 Chat keeps its main controls in one place: **Chat / Room / Self / More**. More holds Thoughts, Tools, Settings, Growth, voice and clear/hide actions. Opening a panel closes the previous one. Thoughts shows recent comments first; activity logs and settings details expand only when needed. Self groups naming, influences, lineage previews and local-model controls into expandable sections. The room puts its artwork and activities first, with notes and room details tucked below. Controls use the native Omarchy button and border styles.
@@ -163,6 +182,8 @@ omarchy restart shell
 The restored idle clone remains installed. The restore tool refuses to overwrite subsequent edits to it. Private companion state and the separately downloaded model are retained for deliberate cleanup. For a copied development install, use `python3 install.py --remove` instead of the plugin removal command.
 
 ## Development
+
+Input/reminder validation: `python3 -m unittest discover -q` and `node test_input_rhythm.js`. The JavaScript tests exercise the same transient detector used in QML: gesture rejection, cooldowns, bounded storage, continuous-activity thresholds, idle returns and missing-sample gaps.
 
 ```sh
 python3 -m unittest discover -s . -v

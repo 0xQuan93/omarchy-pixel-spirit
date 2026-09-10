@@ -24,6 +24,7 @@ ACTIONS.update({
  'dnd_on': ['omarchy','shell','notifications','setDnd','on'],
  'dnd_off': ['omarchy','shell','notifications','setDnd','off'],
  'notes': ['obsidian'],
+ 'reminders': ['omarchy','shell','pixel-spirit','reminders'],
 })
 LABELS = {
  'browser':'Open browser', 'terminal':'Open terminal', 'files':'Open file manager',
@@ -34,6 +35,7 @@ LABELS = {
  'workspace_next':'Next workspace', 'workspace_previous':'Previous workspace',
  'power_saver':'Enable power saver', 'power_balanced':'Use balanced power',
  'dnd_on':'Quiet notifications', 'dnd_off':'Resume notifications',
+ 'reminders':'Open timers and reminders',
 }
 def catalogue():
  return [{'id':key,'label':LABELS[key],'available':bool(shutil.which(argv[0])),

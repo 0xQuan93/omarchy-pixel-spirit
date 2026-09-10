@@ -20,7 +20,8 @@ APP_GROUPS = {
 
 
 def defaults():
-    return {'enabled': False, 'titles': False, 'quiet_until': 0, 'revision': 0}
+    return {'enabled': False, 'titles': False, 'mouse_gestures': False,
+            'activity_responses': False, 'quiet_until': 0, 'revision': 0}
 
 
 def empty():
@@ -49,7 +50,7 @@ def configure(command='status', value=''):
         return status()
     with locked():
         settings = defaults() | get(STATE / 'awareness-settings.json', {})
-        if command in ('enabled', 'titles'):
+        if command in ('enabled', 'titles', 'mouse_gestures', 'activity_responses'):
             if value not in ('on', 'off'):
                 raise ValueError('Choose on or off.')
             settings[command] = value == 'on'
@@ -123,6 +124,14 @@ def gate(settings):
     except (OSError, subprocess.SubprocessError):
         return 'Waiting for desktop signals.'
     return ''
+
+
+def input_gate():
+    """Read-only permission check; never returns window titles or input data."""
+    settings = defaults() | get(STATE / 'awareness-settings.json', {})
+    interested = settings['mouse_gestures'] or settings['activity_responses']
+    reason = gate(settings) if interested else 'Input responses are off.'
+    return {'allowed': not reason, 'reason': reason, 'revision': settings['revision']}
 
 
 def snapshot(include_titles=False):

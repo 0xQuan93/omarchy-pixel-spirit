@@ -11,6 +11,7 @@ PanelWindow {
     property bool busy: false
     property bool pluggedIn: false
     property string detail: ""
+    property string inputSummary: ""
     property string page: "thoughts"
     property double now: Date.now()
     property bool paused: state.settings.quiet_until*1000>now
@@ -100,6 +101,15 @@ PanelWindow {
                             Action {text:"Preview bubble";onClicked:panel.previewBubble()}
                         }
                         Text {width:parent.width;text:panel.state.error||(!panel.state.settings.enabled?"Awareness is off.":panel.paused?"Paused until "+new Date(panel.state.settings.quiet_until*1000).toLocaleTimeString():!panel.pluggedIn?"Resting on battery.":panel.detail||"Quiet comments while plugged in · at most every 20 minutes");wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                        Disclosure {
+                            width:parent.width;title:"Mouse and activity responses";expanded:true
+                            Flow {width:body.width;spacing:6
+                                Action {text:panel.state.settings.mouse_gestures?"Mouse gestures on":"Mouse gestures off";selected:!!panel.state.settings.mouse_gestures;enabled:!panel.busy;onClicked:panel.change("mouse_gestures",panel.state.settings.mouse_gestures?"off":"on")}
+                                Action {text:panel.state.settings.activity_responses?"Activity responses on":"Activity responses off";selected:!!panel.state.settings.activity_responses;enabled:!panel.busy;onClicked:panel.change("activity_responses",panel.state.settings.activity_responses?"off":"on")}
+                            }
+                            Text {width:body.width;text:"Wiggle the pointer beside me to say hello. During sustained activity I settle down; after a minute away I can greet your return. Awareness must be on.";wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body}
+                            Text {width:body.width;text:panel.inputSummary+"\nMovement samples last under two seconds. No keystrokes, saved pointer trails, AI calls or activity rewards.";wrapMode:Text.Wrap;color:Color.foreground;opacity:0.65;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                        }
                         Disclosure {
                             width:parent.width;title:"Privacy and data"
                             Text {width:body.width;text:"App identity and workspace are used for context. No screenshots or typed text. Window titles can include document names and URLs.";wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body}

@@ -43,6 +43,7 @@ def direct_action(message):
   'terminal': ['open a terminal','open the terminal','open terminal'],
   'files': ['open files','open the file manager','open file manager','open the file explorer','open file explorer'],
   'notes': ['open notes','open obsidian','open my notes'],
+  'reminders': ['open reminders','show reminders','show my reminders','open timers'],
   'dnd_on': ['quiet notifications','enable do not disturb','turn on do not disturb'],
   'dnd_off': ['resume notifications','disable do not disturb','turn off do not disturb'],
   'pause_music': ['pause music','pause the music'],
@@ -61,6 +62,10 @@ def direct_action(message):
 def chat(message, eco=False):
  message = message.strip()[:4000]
  if not message: raise ValueError('Say something first.')
+ from reminders import parse_request
+ draft=parse_request(message)
+ if draft:
+  return {'text':'Ready to set your reminder. Check the details and tap Set reminder.', 'emote':'working','action':'','reminderDraft':draft}
  history = read('history.json', [])[-8:]
  if message.lower().rstrip('.?!') in ['what can you do','what tools do you have','list tools','show tools','help']:
   text='I can propose these tools; choose one and tap Run:\n'+ '\n'.join(t['label']+('' if t['available'] else ' (needs '+t['requires']+')') for t in catalogue())
@@ -159,7 +164,8 @@ def read_request(stream):
  arities={'identity':(1,3),'name_self':(1,2),'dream_snapshot':(1,1),
           'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,3),
           'action':(2,2),'listen':(1,1),'speak':(2,2),'load':(1,1),
-          'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'tools':(1,1)}
+          'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'tools':(1,1),'input_gate':(1,1),
+          'reminders':(1,1),'remind':(3,3),'cancel_reminder':(2,2)}
  bounds=arities.get(args[0])
  if bounds is None or not bounds[0]<=len(args)<=bounds[1]:
   raise ValueError('Invalid Wisp command or operand count.')
@@ -168,7 +174,15 @@ def read_request(stream):
 def main():
  args=read_request(sys.stdin.buffer)
  command=args[0]
+ if command in ('reminders','remind','cancel_reminder'):
+  import reminders
+  if command=='reminders':return reminders.upcoming()
+  if command=='remind':return reminders.create(args[1],args[2])
+  return reminders.cancel(args[1])
  if command=='tools':return {'tools':catalogue()}
+ if command=='input_gate':
+  from awareness import input_gate
+  return input_gate()
  if command=='awareness':
   from awareness import configure
   return configure(args[1] if len(args)>1 else 'status',args[2] if len(args)>2 else '')
