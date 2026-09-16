@@ -6,13 +6,16 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import uuid
 
 from growth import STATE
 from storage import get, put
 
 INTERVAL = 20 * 60
+ATTEMPT_INTERVAL = 120
+PENDING_TTL = 90
 APP_GROUPS = {
-    'Maker': ('code', 'codium', 'jetbrains', 'zed', 'emacs', 'neovim', 'nvim'),
+    'Maker': ('code', 'codium', 'jetbrains', 'zed', 'emacs', 'neovim', 'nvim', 'org.omarchy.agent'),
     'Artist': ('krita', 'gimp', 'inkscape', 'blender', 'darktable', 'aseprite'),
     'Musician': ('ardour', 'audacity', 'reaper', 'lmms', 'bitwig', 'ableton'),
     'Archivist': ('obsidian', 'logseq', 'libreoffice', 'org.gnome.papers'),
@@ -20,13 +23,13 @@ APP_GROUPS = {
 
 
 def defaults():
-    return {'enabled': False, 'titles': False, 'mouse_gestures': False,
+    return {'enabled': False, 'titles': False, 'command_hints': True, 'mouse_gestures': False,
             'activity_responses': False, 'quiet_until': 0, 'revision': 0}
 
 
 def empty():
     return {'sampled': 0, 'since': 0, 'snapshot': {}, 'seconds': {}, 'events': [],
-            'reflections': [], 'last_attempt': 0, 'last_key': '', 'error': ''}
+            'reflections': [], 'last_attempt': 0, 'last_delivered': 0, 'pending': None, 'last_key': '', 'error': ''}
 
 
 def locked():
@@ -42,7 +45,7 @@ def status():
     return {'settings': settings, 'snapshot': state['snapshot'], 'sampled': state['sampled'],
             'minutes': {k: int(v / 60) for k, v in state['seconds'].items()},
             'events': state['events'][-8:][::-1], 'reflections': state['reflections'][-6:][::-1],
-            'error': state['error']}
+            'error': state['error'], 'last_delivered': state['last_delivered']}
 
 
 def configure(command='status', value=''):
@@ -50,7 +53,7 @@ def configure(command='status', value=''):
         return status()
     with locked():
         settings = defaults() | get(STATE / 'awareness-settings.json', {})
-        if command in ('enabled', 'titles', 'mouse_gestures', 'activity_responses'):
+        if command in ('enabled', 'titles', 'command_hints', 'mouse_gestures', 'activity_responses'):
             if value not in ('on', 'off'):
                 raise ValueError('Choose on or off.')
             settings[command] = value == 'on'
@@ -72,6 +75,11 @@ def configure(command='status', value=''):
             for event in state['events']:
                 event.pop('title', None)
             state['reflections'] = []
+            state['pending'] = None
+            put(STATE / 'awareness.json', state, preserve_previous=False)
+        state = empty() | get(STATE / 'awareness.json', {})
+        if state['pending'] is not None:
+            state['pending'] = None
             put(STATE / 'awareness.json', state, preserve_previous=False)
         settings['revision'] += 1
         put(STATE / 'awareness-settings.json', settings)
@@ -140,7 +148,9 @@ def snapshot(include_titles=False):
         return None
     # Never retain PID, address, executable arguments, or any other window fields.
     app = re.sub(r'[^\w. +@-]', '', str(window.get('class', '')))[:80]
-    if not app or any(word in app.lower() for word in ('keepass', 'bitwarden', '1password', 'pinentry', 'wisp', 'omarchy')):
+    # Omarchy's agent terminal is an ordinary work window, not shell UI.
+    name = app.lower()
+    if not app or any(word in name for word in ('keepass', 'bitwarden', '1password', 'pinentry', 'wisp', 'pixel-spirit')) or ('omarchy' in name and name != 'org.omarchy.agent'):
         return None
     category = next((group for group, names in APP_GROUPS.items() if any(n in app.lower() for n in names)), 'Other')
     result = {'app': app, 'category': category, 'workspace': window.get('workspace', {}).get('id', 0)}
@@ -185,7 +195,7 @@ def observe():
         advance(state, observed, now)
         credited_seconds=state['seconds'].get(observed['category'],0)-before
         put(STATE / 'awareness.json', state)
-        due = now - state['since'] >= 120 and now - state['last_attempt'] >= INTERVAL
+        due = now - state['since'] >= 120 and ready(state, now)
         from growth import credit_presence
         progress=credit_presence(observed['category'],credited_seconds,now)
     return dict(status(), due=due, growth=progress)
@@ -201,6 +211,83 @@ def context():
             'snapshot': state['snapshot'], 'activeMinutes': state['minutes']}
 
 
+
+def bubble_gate():
+    """Consent and desktop gates independent of mouse/activity opt-ins."""
+    settings = defaults() | get(STATE / 'awareness-settings.json', {})
+    reason = gate(settings)
+    if not reason:
+        try:
+            if snapshot(False) is None:
+                reason = 'Giving this window space.'
+        except (OSError, ValueError, subprocess.SubprocessError):
+            reason = 'Waiting for desktop signals.'
+    return {'allowed': not reason, 'reason': reason, 'revision': settings['revision']}
+
+
+def ready(state, now):
+    return (now - state['last_attempt'] >= ATTEMPT_INTERVAL
+            and now - state['last_delivered'] >= INTERVAL)
+
+
+def stage_reflection(reflection, settings, current, effects=None, script=None, draft=None):
+    latest = defaults() | get(STATE / 'awareness-settings.json', {})
+    if latest != settings or gate(latest) or snapshot(latest['titles']) != current:
+        return {'quiet': 'The moment changed.'}
+    reflection = dict(reflection, id=uuid.uuid4().hex, at=time.time())
+    for key in ('action', 'actionLabel', 'example'):
+        reflection.setdefault(key, '')
+    with locked():
+        if (defaults() | get(STATE / 'awareness-settings.json', {})) != settings:
+            return {'quiet': 'Awareness settings changed.'}
+        state = empty() | get(STATE / 'awareness.json', {})
+        state['pending'] = {'reflection': reflection, 'settings': settings,
+                            'context': current, 'expires': time.time() + PENDING_TTL,
+                            'effects': effects, 'script': script, 'draft': draft}
+        state['error'] = ''
+        put(STATE / 'awareness.json', state)
+    return {'reflection': reflection, 'awareness': status()}
+
+
+def bubble_receipt(ident, disposition):
+    if not isinstance(ident, str) or not re.fullmatch(r'[0-9a-f]{32}', ident) or disposition not in ('displayed', 'suppressed'):
+        raise ValueError('Invalid bubble receipt.')
+    with locked():
+        state = empty() | get(STATE / 'awareness.json', {})
+        pending = state['pending']
+        if not isinstance(pending, dict) or pending.get('reflection', {}).get('id') != ident:
+            return {'id': ident, 'accepted': False, 'reason': 'Bubble receipt is no longer pending.'}
+        state['pending'] = None
+        settings = defaults() | get(STATE / 'awareness-settings.json', {})
+        valid = disposition == 'displayed' and time.time() <= pending['expires'] and settings == pending['settings']
+        if valid:
+            try:
+                valid = not gate(settings) and snapshot(settings['titles']) == pending['context']
+            except (OSError, ValueError, subprocess.SubprocessError):
+                valid = False
+        if valid:
+            valid = commit_delivery(pending)
+        if valid:
+            reflection = dict(pending['reflection'], at=time.time())
+            state['reflections'] = (state['reflections'] + [reflection])[-12:]
+            state['last_delivered'] = time.time()
+            state['error'] = ''
+        put(STATE / 'awareness.json', state)
+    return {'id': ident, 'accepted': bool(valid), 'awareness': status(),
+            'reason': '' if valid else 'Bubble was suppressed, expired, or its context changed.'}
+
+
+def hint_for(current, state):
+    if not (defaults() | get(STATE / 'awareness-settings.json', {}))['command_hints']:
+        return None
+    from command_hints import choose
+    return choose(current, state['reflections'])
+
+
+def commit_delivery(pending):
+    return True
+
+
 def reflect():
     settings = defaults() | get(STATE / 'awareness-settings.json', {})
     reason = gate(settings)
@@ -210,7 +297,7 @@ def reflect():
     with locked():
         state = empty() | get(STATE / 'awareness.json', {})
         now = time.time()
-        if current is None or current != state['snapshot'] or now - state['sampled'] > 90 or now - state['since'] < 120 or now - state['last_attempt'] < INTERVAL:
+        if current is None or current != state['snapshot'] or now - state['sampled'] > 90 or now - state['since'] < 120 or not ready(state, now):
             return {'quiet': 'Waiting for a settled moment.'}
         state['last_attempt'] = now
         state['error'] = ''
@@ -218,6 +305,9 @@ def reflect():
         facts = {'current': current, 'sampledMinutesHere': int((now - state['since']) / 60),
                  'sharedMinutesByActivity': {k: int(v / 60) for k, v in state['seconds'].items()},
                  'recentRemarks': [r['text'] for r in state['reflections'][-3:]]}
+    hint = hint_for(current, state)
+    if hint and (not state['reflections'] or state['reflections'][-1].get('kind') != 'command-hint'):
+        return stage_reflection(hint, settings, current)
     from identity import profile
     from growth import view
     from inference import request
@@ -246,17 +336,8 @@ def reflect():
             state = empty() | get(STATE / 'awareness.json', {})
             state['error'] = 'Local reflection was unavailable; I will try at a later quiet moment.'
             put(STATE / 'awareness.json', state)
+        if hint:
+            return stage_reflection(hint, settings, current)
         return {'quiet': 'Local reflection unavailable.'}
-    # Power/privacy/context may have changed while the model was thinking.
-    latest = defaults() | get(STATE / 'awareness-settings.json', {})
-    if latest != settings or gate(latest) or snapshot(latest['titles']) != current:
-        return {'quiet': 'The moment changed.'}
-    reflection = {'at': time.time(), 'text': text.strip(), 'basis': current['app'], 'kind': 'local-model'}
-    with locked():
-        if (defaults() | get(STATE / 'awareness-settings.json', {})) != settings:
-            return {'quiet': 'Awareness settings changed.'}
-        state = empty() | get(STATE / 'awareness.json', {})
-        state['reflections'] = (state['reflections'] + [reflection])[-12:]
-        state['error'] = ''
-        put(STATE / 'awareness.json', state)
-    return {'reflection': reflection, 'awareness': status()}
+    reflection = {'text': text.strip(), 'basis': current['app'], 'kind': 'local-model'}
+    return stage_reflection(reflection, settings, current)

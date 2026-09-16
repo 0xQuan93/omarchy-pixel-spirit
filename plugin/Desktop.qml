@@ -26,12 +26,37 @@ Item {
     property string awarenessDetail: ""
     property string asideText: ""
     property string asideBasis: ""
+    property string asideId: ""
+    property string asideAction: ""
+    property string asideActionLabel: ""
+    property string asideSource: ""
+    property bool asideAcknowledged: false
+    property string bubbleReason: ""
+    property var bubbleReceipts: []
+    function acknowledgeBubble(id,status) {
+        if(!id)return
+        bubbleReceipts=bubbleReceipts.concat([["bubble_receipt",id,status]])
+        sendBubbleReceipt()
+    }
+    function sendBubbleReceipt() {
+        if(bubbleReceipt.busy || !bubbleReceipts.length)return
+        var next=bubbleReceipts[0];bubbleReceipts=bubbleReceipts.slice(1)
+        bubbleReceipt.run(next)
+    }
+    onAsideVisibleChanged: {
+        if(!asideVisible && asideId && !asideAcknowledged)acknowledgeBubble(asideId,"suppressed")
+        if(!asideVisible){asideId="";asideAcknowledged=false}
+    }
     property bool asideVisible: false
     property bool asidePreview: false
     property bool moreOpen: false
     property bool senseAllowed: stateReady && awareness.settings.enabled && !eco && !hidden && !dreaming && !presenceIdle.isIdle && motionClock>=awareness.settings.quiet_until*1000 && !busy && !choice.busy && !selfName.busy
-    property bool commentAllowed: senseAllowed && !inputs.focused && !opened && !roomOpen && !identityOpen && !awarenessOpen && !remindersOpen && !speaker.busy && !pending
-    onCommentAllowedChanged: if(!commentAllowed){reflection.cancel();asideVisible=false}
+    property bool commentAllowed: senseAllowed && !!ToplevelManager.activeToplevel && !ToplevelManager.activeToplevel.fullscreen && !inputs.focused && !opened && !roomOpen && !identityOpen && !awarenessOpen && !remindersOpen && !speaker.busy && !pending
+    property bool reflectionDue: false
+    onCommentAllowedChanged: {
+        if(!commentAllowed){reflection.cancel();asideVisible=false}
+        else if(reflectionDue && !asideVisible && !reflection.busy){reflectionDue=false;reflection.run(["reflect"])}
+    }
     IdleMonitor {id:presenceIdle;timeout:180;respectInhibitors:false}
     InputSense {
         id:inputs
@@ -108,9 +133,25 @@ Item {
         if(destination==="tools")toolCall.run(["tools"])
         if(remindersOpen)reminderList.run(["reminders"])
     }
+    function presentBubble(data) {
+        asideVisible=false
+        asidePreview=false;asideId=data.id||"";asideAcknowledged=false
+        asideText=data.text||"";asideBasis=data.basis||""
+        asideAction=data.action||"";asideActionLabel=data.actionLabel||""
+        asideSource=data.kind==="command-hint"?"Command tip · works locally":data.kind==="local-script"?"Local routine":"Local model"
+        asideVisible=true;asideDismiss.restart()
+        if(asideId)bubbleGate.run(["bubble_gate"])
+    }
+    function reviewBubbleAction() {
+        var action=asideAction,label=asideActionLabel
+        if(!action)return
+        showPanel("chat");journalOpen=false;pending=action;pendingLabel=label
+        responseSource="local";reply="Ready: "+label+". Tap Run below."
+    }
     function previewBubble() {
-        showPanel("");asidePreview=true;asideBasis="Preview"
-        asideText="A little thought, right here beside me. Hover to linger, or click to let it go."
+        showPanel("");asidePreview=true;asideBasis="Preview";asideId=""
+        asideAction="theme_picker";asideActionLabel="Choose a theme";asideSource="Command tip · works locally"
+        asideText="Want a different look? Try “change my theme” to browse your installed themes. Review the command below when you’re ready."
         asideVisible=true;asideDismiss.restart()
     }
     function toggle() { showPanel(opened?"":"chat");persist() }
@@ -138,7 +179,7 @@ Item {
         function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
+        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.toggle()}}
@@ -173,14 +214,38 @@ Item {
     Call {id:observer;onReceived:function(d){
         if(d.error){root.awarenessDetail=d.error;return}
         root.awareness=d;if(d.growth)root.growth=d.growth;root.awarenessDetail=d.quiet||""
-        if(d.due && root.commentAllowed && !reflection.busy)reflection.run(["reflect"])
+        root.reflectionDue=!!d.due
+        if(root.reflectionDue && root.commentAllowed && !root.asideVisible && !reflection.busy){root.reflectionDue=false;reflection.run(["reflect"])}
     }}
     Call {id:reflection;onReceived:function(d){
-        if(d.reflection && root.commentAllowed){root.asidePreview=false;root.asideText=d.reflection.text;root.asideBasis=d.reflection.basis;root.asideVisible=true;asideDismiss.restart();root.awareness=d.awareness}
-        else if(d.quiet)root.awarenessDetail=d.quiet
+        if(d.awareness)root.awareness=d.awareness
+        if(d.reflection){
+            if(root.commentAllowed && !root.asideVisible)root.presentBubble(d.reflection)
+            else if(d.reflection.id)root.acknowledgeBubble(d.reflection.id,"suppressed")
+        }
+        if(d.quiet){root.awarenessDetail=d.quiet;root.bubbleReason=d.quiet}
     }}
     Timer {interval:60000;running:root.senseAllowed;repeat:true;triggeredOnStart:true;onTriggered:if(!observer.busy)observer.run(["observe"])}
-    Timer {id:asideDismiss;interval:14000;onTriggered:root.asideVisible=false}
+    Call {id:bubbleReceipt;onBusyChanged:if(!busy)Qt.callLater(root.sendBubbleReceipt)
+    onReceived:function(d){
+        if(d.awareness)root.awareness=d.awareness
+        if(d.reason)root.bubbleReason=d.reason
+        if(d.accepted===false && d.id===root.asideId)root.asideVisible=false
+        Qt.callLater(root.sendBubbleReceipt)
+    }}
+    Call {id:bubbleGate;onReceived:function(d){
+        root.bubbleReason=d.reason||""
+        if(root.asidePreview || !root.asideVisible)return
+        if(!d.allowed || !root.commentAllowed){root.asideVisible=false;return}
+        var candidate=root.asideId
+        Qt.callLater(function(){
+            if(candidate && candidate===root.asideId && !root.asideAcknowledged && root.asideVisible && asideCard.visible && win.visible && root.commentAllowed){
+                root.asideAcknowledged=true;root.acknowledgeBubble(candidate,"displayed")
+            }
+        })
+    }}
+    Timer {interval:5000;running:root.asideVisible && !root.asidePreview;repeat:true;onTriggered:if(!bubbleGate.busy)bubbleGate.run(["bubble_gate"])}
+    Timer {id:asideDismiss;interval:Math.min(30000,Math.max(14000,root.asideText.length*65));onTriggered:root.asideVisible=false}
     AwarenessPanel {
         id:senses
         visible:root.awarenessOpen && root.stateReady && !root.dreaming
@@ -239,7 +304,7 @@ Item {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "pixel-spirit"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: (root.opened || root.asideVisible) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         Item {
             width:128; height:128
             Spirit { id:avatar; visible:root.stateReady; anchors.top: parent.top; width:128; height:102; mood:root.displayMood; eco:root.eco; active:win.visible; stage:root.growth.level; trait:root.family;seed:root.profile.seed;device:root.profile.device;accent:Color.accent;foreground:Color.popups.text;background:Color.popups.background }
@@ -299,6 +364,8 @@ Item {
             id:asideCard
             visible:root.asideVisible && !root.opened;y:125;width:304;height:implicitHeight
             name:root.profile.name;text:root.asideText;preview:root.asidePreview
+            sourceLabel:root.asideSource;actionLabel:root.asideAction ? "Review: "+root.asideActionLabel : ""
+            onActionRequested:root.reviewBubbleAction()
             onDismissed:root.asideVisible=false
             onHovered:function(active){if(active)asideDismiss.stop();else if(root.asideVisible)asideDismiss.restart()}
         }

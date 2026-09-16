@@ -106,6 +106,7 @@ class AwarenessTests(unittest.TestCase):
 
     def prepared(self):
         a.configure('enabled', 'on')
+        a.configure('command_hints', 'off')
         observed = {'app': 'Code', 'category': 'Maker', 'workspace': 1}
         state = a.empty() | {'sampled': 1980, 'since': 1800, 'snapshot': observed}
         put(self.state / 'awareness.json', state)

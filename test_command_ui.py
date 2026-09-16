@@ -33,7 +33,7 @@ class CommandUiTests(unittest.TestCase):
                 text = re.sub(r'^\s*margins(?:\s*\{[^}]*\}|\.[^\n]*).*$', '', text, flags=re.M)
                 text = re.sub(r';?exclusionMode\s*:\s*ExclusionMode.Ignore', '', text)
                 source.write_text(text)
-            (folder / 'Call.qml').write_text('import QtQuick\nItem {property bool busy:false;signal received(var data);function run(args){} function cancel(){}}')
+            (folder / 'Call.qml').write_text('import QtQuick\nItem {property bool busy:false;property var requests:[];signal received(var data);function run(args){requests=requests.concat([args]);} function cancel(){}}')
             capture = Path(os.environ.get('WISP_UI_CAPTURE_DIR', tmp))
             capture.mkdir(parents=True, exist_ok=True)
             import json
@@ -73,10 +73,45 @@ class CommandUiTests(unittest.TestCase):
             r.saveToFile(COMMANDS_PATH);
             senses.propose("theme_menu","Choose a theme");
             if(!root.opened || root.pending!=="theme_menu" || root.pendingLabel!=="Choose a theme" || root.responseSource!=="local")Qt.exit(6);
-            console.log("COMMAND_UI_OK");Qt.quit();
+            testBubble.start();
         });
     }}
-'''.replace('CHAT_PATH', json.dumps(str(capture / 'wisp-chat.png'))).replace('COMMANDS_PATH', json.dumps(str(capture / 'wisp-commands.png')))
+    Timer {id:testBubble;interval:100;onTriggered:{
+        root.pending="";root.pendingLabel="";
+        root.previewBubble();
+        if(!root.asideVisible || root.pending || !asideCard.preview || !asideCard.actionLabel)Qt.exit(11);
+        if(actor.requests.length || brain.requests.length)Qt.exit(12);
+        if(!asideDismiss.running)Qt.exit(13);
+        asideCard.hovered(true);
+        if(asideDismiss.running)Qt.exit(14);
+        asideCard.hovered(false);
+        if(!asideDismiss.running)Qt.exit(15);
+        checkBounds(asideCard);
+        asideCard.dismissed();
+        if(root.asideVisible)Qt.exit(16);
+        root.previewBubble();
+        var proposed=root.asideAction;
+        asideCard.actionRequested();
+        if(!root.opened || root.pending!==proposed || !root.pendingLabel || root.asideVisible)Qt.exit(17);
+        if(actor.requests.length || brain.requests.length)Qt.exit(18);
+        root.showPanel("");root.pending="";root.pendingLabel="";
+        root.presentBubble({id:"sample-hint",text:"You can change a theme locally. 雲",basis:"Installed command",kind:"command-hint",action:"theme_picker",actionLabel:"Choose a theme"});
+        if(!root.asideVisible || root.asideId!=="sample-hint" || root.asideSource!=="Command tip · works locally" || asideCard.actionLabel!=="Review: Choose a theme")Qt.exit(19);
+        if(bubbleGate.requests.length!==1 || bubbleGate.requests[0][0]!=="bubble_gate")Qt.exit(20);
+        if(actor.requests.length || brain.requests.length || root.pending)Qt.exit(21);
+        asideCard.actionRequested();
+        if(root.pending!=="theme_picker" || !root.opened || actor.requests.length)Qt.exit(22);
+        root.showPanel("");root.pending="";root.pendingLabel="";
+        root.presentBubble({text:"A quiet local thought.",kind:"local-script"});
+        if(asideCard.actionLabel || root.asideAction || root.asideSource!=="Local routine")Qt.exit(23);
+        asideCard.dismissed();
+        root.previewBubble();testBubbleCapture.start();
+    }}
+    Timer {id:testBubbleCapture;interval:100;onTriggered:{
+        checkBounds(asideCard);
+        asideCard.grabToImage(function(r){r.saveToFile(BUBBLE_PATH);console.log("COMMAND_UI_OK");Qt.quit();});
+    }}
+'''.replace('CHAT_PATH', json.dumps(str(capture / 'wisp-chat.png'))).replace('COMMANDS_PATH', json.dumps(str(capture / 'wisp-commands.png'))).replace('BUBBLE_PATH', json.dumps(str(capture / 'wisp-preview-bubble.png')))
             desktop.write_text(desktop.read_text().replace('    id: root', '    id: root\n' + probe, 1))
             (folder / 'shell.qml').write_text('''
 import QtQuick
@@ -101,6 +136,7 @@ Scope {
                 self.assertNotIn(failure, output)
             self.assertTrue((capture / 'wisp-chat.png').is_file())
             self.assertTrue((capture / 'wisp-commands.png').is_file())
+            self.assertTrue((capture / 'wisp-preview-bubble.png').is_file())
 
 
 if __name__ == '__main__': unittest.main()

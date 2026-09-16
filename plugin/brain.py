@@ -155,7 +155,7 @@ def read_request(stream):
  arities={'identity':(1,3),'name_self':(1,2),'dream_snapshot':(1,1),
           'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,3),
           'action':(2,2),'listen':(1,1),'speak':(2,2),'load':(1,1),
-          'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'tools':(1,1),'input_gate':(1,1),
+          'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'tools':(1,1),'input_gate':(1,1),'bubble_gate':(1,1),'bubble_receipt':(3,3),
           'reminders':(1,1),'remind':(3,3),'cancel_reminder':(2,2)}
  bounds=arities.get(args[0])
  if bounds is None or not bounds[0]<=len(args)<=bounds[1]:
@@ -171,6 +171,12 @@ def main():
   if command=='remind':return reminders.create(args[1],args[2])
   return reminders.cancel(args[1])
  if command=='tools':return {'tools':catalogue(BASE,include_personal=True)}
+ if command=='bubble_gate':
+  from awareness import bubble_gate
+  return bubble_gate()
+ if command=='bubble_receipt':
+  from awareness import bubble_receipt
+  return bubble_receipt(args[1],args[2])
  if command=='input_gate':
   from awareness import input_gate
   return input_gate()

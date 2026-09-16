@@ -90,13 +90,14 @@ PanelWindow {
                     Column {
                         visible:panel.page==="settings";width:parent.width;spacing:16
                         Text {text:"Quiet company";color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.title}
-                        Text {width:parent.width;text:"Brief speech bubbles beside your companion, saved in Thoughts. Hover to keep one open; click to dismiss.";wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
+                        Text {width:parent.width;text:"Useful command tips and occasional thoughts beside your companion. Hover to keep one open; use Dismiss when finished. Suggested commands open for review before they run.";wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
                         Flow {width:parent.width;spacing:6
                             Action {text:panel.state.settings.enabled?"Awareness on":"Awareness off";selected:panel.state.settings.enabled;enabled:!panel.busy;onClicked:panel.change("enabled",panel.state.settings.enabled?"off":"on")}
                             Action {text:panel.paused?"Resume":"Pause 1h";enabled:!panel.busy;onClicked:panel.change(panel.paused?"resume":"pause","")}
                             Action {text:"Preview bubble";onClicked:panel.previewBubble()}
+                            Action {text:panel.state.settings.command_hints!==false?"Command tips on":"Command tips off";selected:panel.state.settings.command_hints!==false;enabled:!panel.busy;onClicked:panel.change("command_hints",panel.state.settings.command_hints!==false?"off":"on")}
                         }
-                        Text {width:parent.width;text:panel.state.error||(!panel.state.settings.enabled?"Awareness is off.":panel.paused?"Paused until "+new Date(panel.state.settings.quiet_until*1000).toLocaleTimeString():!panel.pluggedIn?"Resting on battery.":panel.detail||"Quiet comments while plugged in · at most every 20 minutes");wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                        Text {width:parent.width;text:panel.state.error||(!panel.state.settings.enabled?"Awareness is off.":panel.paused?"Paused until "+new Date(panel.state.settings.quiet_until*1000).toLocaleTimeString():!panel.pluggedIn?"Resting on battery.":panel.detail||"Ready for a quiet moment · bubbles at least 20 minutes apart");wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
                         Disclosure {
                             width:parent.width;title:"Mouse and activity responses";expanded:true
                             Flow {width:body.width;spacing:6
