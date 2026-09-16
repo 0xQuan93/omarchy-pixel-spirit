@@ -38,6 +38,19 @@ def context():
  return result
 def direct_action(message):
  return smart_match(message, ACTIONS)
+def local_intent(message):
+ from intent_router import resolve
+ result=resolve(message,ACTIONS,LABELS,normalize)
+ if result is None:return None
+ def available(action):
+  return action in ACTIONS and bool(shutil.which(ACTIONS[action][0]))
+ action=result.get('action','')
+ if action and not available(action):
+  result.update(text='I recognize that command, but its tool is unavailable on this machine.',action='',actionLabel='',choices=[])
+ elif result.get('choices'):
+  result['choices']=[choice for choice in result['choices'] if available(choice['action'])]
+  if not result['choices']:result['text']='I recognize the request, but those controls are unavailable on this machine.'
+ return result
 def chat(message, eco=False):
  message = message.strip()[:4000]
  if not message: raise ValueError('Say something first.')
@@ -58,10 +71,12 @@ def chat(message, eco=False):
   return {'text':text,'emote':'reading','action':'','route':'local'}
  action = direct_action(message)
  if action:
-  if not shutil.which(ACTIONS[action][0]):return {'text':'That tool needs '+ACTIONS[action][0]+'. It is not installed.','emote':'idle','action':''}
+  if not shutil.which(ACTIONS[action][0]):return {'text':'That tool needs '+ACTIONS[action][0]+'. It is not installed.','emote':'idle','action':'','route':'local'}
   data = {'text':'Ready: '+LABELS[action]+'. Tap Run below.', 'emote':'playing' if action in ['play_pause','next_track'] else 'working','action':action,'actionLabel':LABELS[action],'route':'local'}
   save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(data)}])[-8:])
   return data
+ local_reply=local_intent(message)
+ if local_reply:return local_reply
  from growth import memory_context
  remembered = memory_context(message)
  from identity import profile

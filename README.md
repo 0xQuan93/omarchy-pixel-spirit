@@ -47,6 +47,14 @@ Exact percentages are parsed separately, without AI or adding hundreds of numeri
 
 Chat distinguishes **No AI needed** from **Local AI** replies. If local conversation is unavailable, Wisp offers supported command examples and points to Commands. The growing bank covers explicit supported desktop tasks; it is not arbitrary shell execution or universal control of every application's internal UI. Publishing, deleting files, resetting configuration, and installing packages are not inferred from broad requests. Installation/update/power menus let the user choose their native next step.
 
+## Nuanced requests and local clarification (1.5)
+
+After the exact phrase and installed-target routes, a small intent parser combines a supported operation, target, and qualifier. **“Bring the Bluetooth settings up,” “turn my speaker volume down one step,”** and **“turn the night light back on”** can be understood locally without listing every wording separately. A new interpretation prepares a readable **Run** preview.
+
+If you say **“close it,”** Wisp asks which target and offers up to four numbered choices. Click one, type **“second one”** or **“2,”** or type its exact label to prepare the command. **“Cancel”** clears the choices. Choosing an option never executes it. The short follow-up uses only the current on-screen choices and clears when the interaction changes.
+
+Conflicting interpretations ask rather than pick by pattern order. Meaningful source, timing, amount, negation and playback-preservation constraints cannot be silently dropped. Missing tools get a local explanation. Broader conversation still uses the model. There is no automatic alias learning or transcript collection in this layer. See [intent routing](docs/INTENT-ROUTING.md) for extension contracts and tests.
+
 ## Everyday commands and your personal bank (1.3)
 
 Common requests use a deterministic phrase bank before Ollama. No model is needed for **“change my theme,” “change wallpaper,” “open audio settings,” “show keyboard shortcuts,” “clipboard history,” “keep my computer awake,”** or **“show the bar.”** Public Wisp keeps the existing **Run** review step. A theme request without a name opens the native chooser; **“change my theme to Tokyo Night”** offers that exact installed theme. Background, font, app, plugin, default-app, learning, capture, recording, install, update and power menus are included. Opening a menu does not choose its options for you.

@@ -114,6 +114,52 @@ Item {
     property string reply: "Hey, I’m Wisp. A little signal in your machine.\n\nAsk me something, or try ‘turn the volume down’."
     property string pending: ""
     property string pendingLabel: ""
+    property var commandChoices: []
+    onReplyChanged: commandChoices=[]
+    function clarificationChoices(data) {
+        if(!Array.isArray(data))return []
+        return data.slice(0,16).filter(function(c){return c && typeof c.action==="string" && c.action.length>0 && c.action.length<=200 && typeof c.label==="string" && c.label.length>0 && c.label.length<=160}).slice(0,4)
+    }
+    function handleCommandChoiceReply(message) {
+        // Speech transcripts add sentence punctuation; keep every qualifier.
+        var key=message.trim().toLowerCase().replace(/[.!?]+$/, "").trim()
+        key=key.replace(/^please,?\s+/, "").replace(/,?\s+please$/, "").trim()
+        if((pending || commandChoices.length) && ["cancel","cancel that","never mind","nevermind"].indexOf(key)>=0){
+            commandChoices=[];pending="";pendingLabel="";responseSource="local"
+            reply="Cancelled. Nothing was run.";return true
+        }
+        if(pending && key==="yes"){
+            responseSource="local";reply="Review the command below, then tap Run.";return true
+        }
+        if(!commandChoices.length)return false
+        var choices=commandChoices.slice()
+        if(key==="yes"){
+            // A single visible choice is unambiguous; still only prepare Run.
+            if(choices.length===1)prepareCommandChoice(choices[0])
+            else {reply="Choose a number from 1 to "+choices.length+", or one of the labels below.";commandChoices=choices;responseSource="local"}
+            return true
+        }
+        var ordinals=["first","second","third","fourth"]
+        var selection=-1,labelMatches=0
+        for(var i=0;i<choices.length;i++)if(key===choices[i].label.toLowerCase()){selection=i;labelMatches++}
+        if(labelMatches>1){reply="Choose a number from 1 to "+choices.length+".";commandChoices=choices;responseSource="local";return true}
+        if(selection<0){
+            for(var j=0;j<ordinals.length;j++){
+                var ordinal=ordinals[j],number=String(j+1)
+                var forms=[number,ordinal,ordinal+" one","the "+ordinal+" one",ordinal+" option","the "+ordinal+" option","choose "+ordinal,"choose the "+ordinal+" one","choose the "+ordinal+" option","option "+number,"number "+number,"choose "+number]
+                if(forms.indexOf(key)>=0){selection=j;break}
+            }
+        }
+        if(selection<0)return false
+        if(selection>=choices.length){reply="Choose a number from 1 to "+choices.length+".";commandChoices=choices;responseSource="local";return true}
+        prepareCommandChoice(choices[selection]);return true
+    }
+    function prepareCommandChoice(choice) {
+        if(busy || !choice)return
+        var action=choice.action,label=choice.label
+        commandChoices=[];journalOpen=false;pending=action;pendingLabel=label
+        responseSource="local";reply="Ready: "+label+". Tap Run below."
+    }
     property string responseSource: ""
     property var growth: ({stage:"Spark",level:0,trait:"Maker",xp:0,next:24,traits:{},journal:[]})
     property bool journalOpen: false
@@ -122,7 +168,7 @@ Item {
     property bool busy: !stateReady || brain.busy || listener.busy || actor.busy
     function persist() { if(!stateReady)return; saver.run(["save", JSON.stringify({x:posX,y:posY,hidden:hidden,voice:voice,movement:movement})]) }
     function showPanel(destination) {
-        asideVisible=false;moreOpen=false
+        asideVisible=false;moreOpen=false;commandChoices=[]
         opened=destination==="chat"
         roomOpen=destination==="room"
         identityOpen=destination==="self"
@@ -157,14 +203,15 @@ Item {
     function toggle() { showPanel(opened?"":"chat");persist() }
     function send() {
         if (busy || !field.text.trim()) return
-        journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
+        if(handleCommandChoiceReply(field.text)){field.text="";return}
+        commandChoices=[];journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
         brain.run(["chat",field.text,eco?"eco":"normal"]); field.text=""
     }
     IpcHandler {
         target: "pixel-spirit"
         function toggle(): void { root.toggle() }
         function open(): void { root.showPanel("chat");root.persist() }
-        function ask(message: string): void { root.showPanel("chat"); field.text=message; root.send() }
+        function ask(message: string): void { if(!root.opened)root.showPanel("chat"); field.text=message; root.send() }
         function show(): void { root.hidden=false; root.persist() }
         function hide(): void { root.showPanel("");root.hidden=true;root.persist() }
         function reset(): void { root.posX=24; root.posY=70; root.hidden=false; root.persist() }
@@ -179,7 +226,7 @@ Item {
         function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
+        function status(): string { return JSON.stringify({responseSource:root.responseSource,pending:root.pending,pendingLabel:root.pendingLabel,choiceCount:root.commandChoices.length,hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.toggle()}}
@@ -286,7 +333,7 @@ Item {
     }
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
-    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
+    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
     Call { id: actor; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(!d.error){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
     Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.reply="Transcribing your recording locally…" } }
     Call { id: listener; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
@@ -372,7 +419,7 @@ Item {
         Ui.BorderSurface {
             id:chatSurface
             visible:root.opened;y:130;width:parent.width;height:chatContent.implicitHeight+32
-            color:Color.popups.background;radius:Style.cornerRadius
+            color:Qt.rgba(Color.popups.background.r,Color.popups.background.g,Color.popups.background.b,1);radius:Style.cornerRadius
             borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)
             Column {
                 id:chatContent;x:16;y:16;width:parent.width-32;spacing:10
@@ -403,9 +450,49 @@ Item {
                     Action {text:"Hide";onClicked:{root.showPanel("");root.hidden=true;root.persist()}}
                 }
                 Flickable {
-                    width:parent.width;height:root.journalOpen?180:130;contentHeight:answer.implicitHeight;clip:true
+                    width:parent.width;height:root.journalOpen?180:root.commandChoices.length>0?Math.min(130,Math.max(44,answer.implicitHeight)):130;contentHeight:answer.implicitHeight;clip:true
                     boundsBehavior:Flickable.StopAtBounds;Controls.ScrollBar.vertical:Controls.ScrollBar {}
                     Text {id:answer;width:parent.width-8;text:!root.stateReady?(root.restoreError||"Restoring your saved companion…"):root.journalOpen?(root.growthError||Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")):root.reply;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
+                }
+                Column {
+                    visible:root.commandChoices.length>0 && !root.journalOpen
+                    width:parent.width;spacing:6
+                    Text {width:parent.width;text:"Choose a button or reply with its number";color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.caption}
+                    Flickable {
+                        width:parent.width;height:Math.min(choiceList.implicitHeight,168)
+                        contentHeight:choiceList.implicitHeight;clip:true
+                        boundsBehavior:Flickable.StopAtBounds
+                        Controls.ScrollBar.vertical:Controls.ScrollBar {}
+                        Column {
+                            id:choiceList;width:parent.width-8;spacing:6
+                            Repeater {
+                                model:root.commandChoices
+                                Controls.Button {
+                                    id:choiceButton
+                                    required property var modelData
+                                    required property int index
+                                    width:choiceList.width;padding:8
+                                    implicitHeight:choiceText.implicitHeight+16
+                                    text:(index+1)+". "+modelData.label
+                                    enabled:!root.busy
+                                    focusPolicy:Qt.TabFocus
+                                    Accessible.name:modelData.label+", prepare command for review"
+                                    onClicked:root.prepareCommandChoice(modelData)
+                                    background:Ui.BorderSurface {
+                                        radius:Style.cornerRadius
+                                        color:Qt.alpha(Color.accent,choiceButton.hovered||choiceButton.activeFocus?0.14:0.05)
+                                        borderSpec:Border.controlSpec(choiceButton.activeFocus?"focus":choiceButton.hovered?"hover-cursor":"normal",Color.foreground,Color.accent)
+                                    }
+                                    contentItem:Text {
+                                        id:choiceText;text:choiceButton.text;textFormat:Text.PlainText
+                                        wrapMode:Text.Wrap;color:Color.foreground
+                                        font.family:Style.font.family;font.pixelSize:Style.font.bodySmall
+                                    }
+                                    onActiveFocusChanged:if(activeFocus)choiceList.parent.contentY=Math.min(Math.max(0,y+height-choiceList.parent.height),Math.max(0,choiceList.implicitHeight-choiceList.parent.height))
+                                }
+                            }
+                        }
+                    }
                 }
                 Column {
                     visible:!!root.pending;width:parent.width;spacing:6

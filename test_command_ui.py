@@ -23,9 +23,13 @@ class CommandUiTests(unittest.TestCase):
             folder = Path(tmp)
             for name in ('Ui', 'Commons'):
                 (folder / name).symlink_to(SHELL / name)
-            for source in (ROOT / 'plugin').iterdir():
-                if source.suffix in ('.qml', '.js'):
-                    shutil.copy2(source, folder / source.name)
+            sources = [ROOT / 'plugin']
+            if os.environ.get('WISP_UI_PLUGIN_DIR'):
+                sources.append(Path(os.environ['WISP_UI_PLUGIN_DIR']))
+            for source_dir in sources:
+                for source in source_dir.iterdir():
+                    if source.suffix in ('.qml', '.js'):
+                        shutil.copy2(source, folder / source.name)
             for source in folder.glob('*.qml'):
                 text = source.read_text().replace('PanelWindow {', 'FloatingWindow {')
                 text = re.sub(r'^.*WlrLayershell.*\n', '', text, flags=re.M)
@@ -122,10 +126,75 @@ class CommandUiTests(unittest.TestCase):
     }}
     Timer {id:testBubbleCapture;interval:100;onTriggered:{
         checkBounds(asideCard);
-        asideCard.grabToImage(function(r){r.saveToFile(BUBBLE_PATH);console.log("COMMAND_UI_OK");Qt.quit();});
+        asideCard.grabToImage(function(r){r.saveToFile(BUBBLE_PATH);testChoices.start();});
     }}
-'''.replace('CHAT_PATH', json.dumps(str(capture / 'wisp-chat.png'))).replace('COMMANDS_PATH', json.dumps(str(capture / 'wisp-commands.png'))).replace('BUBBLE_PATH', json.dumps(str(capture / 'wisp-preview-bubble.png')))
-            desktop.write_text(desktop.read_text().replace('    id: root', '    id: root\n' + probe, 1))
+    Timer {id:testChoices;interval:100;onTriggered:{
+        root.showPanel("chat");
+        brain.received({text:"Which playback control did you mean?",emote:"idle",route:"local",matchType:"clarify",action:"",choices:[
+            {action:"pause_music",label:"Pause music"},
+            {action:"cartoons_close",label:"Stop the cartoon player and close its controls"},
+            {action:"cartoons_hide",label:"Hide cartoon controls and keep playing"},
+            {action:"cartoons_off",label:"Stop cartoon playback"},
+            {action:"extra",label:"Fifth choice is omitted"}, {action:22,label:"Malformed"}
+        ]});
+        if(root.commandChoices.length!==4 || root.pending || actor.requests.length || brain.requests.length)Qt.exit(28);
+        testChoose.start();
+    }}
+    Timer {id:testChoose;interval:100;onTriggered:{
+        checkBounds(chatContent);
+        chatSurface.grabToImage(function(r){
+            r.saveToFile(CHOICES_PATH);
+            var choice=findButton(chatContent,"2. Stop the cartoon player and close its controls");if(!choice)Qt.exit(29);
+            choice.clicked();
+            if(root.pending!=="cartoons_close" || root.pendingLabel!=="Stop the cartoon player and close its controls" || root.commandChoices.length || actor.requests.length || brain.requests.length)Qt.exit(30);
+            findButton(chatContent,"Cancel").clicked();
+            if(root.pending || root.commandChoices.length)Qt.exit(31);
+            var response={text:"Choose a source",route:"local",action:"",choices:[{action:"pause_music",label:"Pause music"}]};
+            brain.received(response);root.reply="A newer message";
+            if(root.commandChoices.length)Qt.exit(32);
+            brain.received(response);root.showPanel("tools");
+            if(root.commandChoices.length)Qt.exit(33);
+            root.showPanel("chat");brain.received(response);senses.propose("theme_menu","Choose a theme");
+            if(root.commandChoices.length)Qt.exit(34);
+            var followup={text:"Which source?",route:"local",action:"",choices:[{action:"pause_music",label:"Pause music"},{action:"cartoons_close",label:"Close cartoons"}]};
+            var requests=brain.requests.length;
+            var ordinalForms=["second one","choose the second option","2","please choose the second option","second one please","CLOSE CARTOONS","Second one.","2!","Please, choose the second option."];
+            for(var i=0;i<ordinalForms.length;i++){
+                brain.received(followup);field.text=ordinalForms[i];root.send();
+                if(root.pending!=="cartoons_close" || root.pendingLabel!=="Close cartoons" || root.commandChoices.length || field.text || brain.requests.length!==requests || actor.requests.length)Qt.exit(37);
+            }
+            brain.received(followup);field.text="Yes, please.";root.send();
+            if(root.pending || root.commandChoices.length!==2 || field.text || brain.requests.length!==requests || actor.requests.length)Qt.exit(38);
+            field.text="fourth option";root.send();
+            if(root.pending || root.commandChoices.length!==2 || brain.requests.length!==requests)Qt.exit(39);
+            for(var j=0;j<["not the second one","second one tomorrow","choose the second option and reboot","second one, then reboot","second one, then close the browser."].length;j++){
+                if(root.handleCommandChoiceReply(["not the second one","second one tomorrow","choose the second option and reboot","second one, then reboot","second one, then close the browser."][j]))Qt.exit(40);
+            }
+            field.text="never mind";root.send();
+            if(root.pending || root.commandChoices.length || field.text || root.reply!=="Cancelled. Nothing was run." || brain.requests.length!==requests || actor.requests.length)Qt.exit(41);
+            if(root.handleCommandChoiceReply("second one"))Qt.exit(42);
+            brain.received(response);field.text="Yes, please.";root.send();
+            if(root.pending!=="pause_music" || root.commandChoices.length || brain.requests.length!==requests || actor.requests.length)Qt.exit(44);
+            brain.received(followup);testIpc.ask("Second one.");
+            var ipcStatus=JSON.parse(testIpc.status());
+            if(root.pending!=="cartoons_close" || root.commandChoices.length || brain.requests.length!==requests || actor.requests.length)Qt.exit(45);
+            if(ipcStatus.pending!=="cartoons_close" || ipcStatus.pendingLabel!=="Close cartoons" || ipcStatus.responseSource!=="local" || ipcStatus.choiceCount!==0)Qt.exit(46);
+            testIpc.ask("Yes, please.");
+            if(root.pending!=="cartoons_close" || brain.requests.length!==requests || actor.requests.length)Qt.exit(47);
+            testIpc.ask("Never mind.");
+            if(root.pending || root.pendingLabel || root.commandChoices.length || brain.requests.length!==requests || actor.requests.length)Qt.exit(48);
+            if(root.handleCommandChoiceReply("second one"))Qt.exit(49);
+            brain.received(response);testIpc.ask("new request");
+            if(root.commandChoices.length || brain.requests.length!==1 || actor.requests.length)Qt.exit(35);
+            brain.received({error:"Unavailable",choices:response.choices});
+            if(root.commandChoices.length)Qt.exit(36);
+            field.text="second one";root.send();
+            if(brain.requests.length!==2 || root.pending || actor.requests.length)Qt.exit(43);
+            console.log("COMMAND_UI_OK");Qt.quit();
+        });
+    }}
+'''.replace('CHAT_PATH', json.dumps(str(capture / 'wisp-chat.png'))).replace('COMMANDS_PATH', json.dumps(str(capture / 'wisp-commands.png'))).replace('BUBBLE_PATH', json.dumps(str(capture / 'wisp-preview-bubble.png'))).replace('CHOICES_PATH', json.dumps(str(capture / 'wisp-clarification.png')))
+            desktop.write_text(desktop.read_text().replace('    id: root', '    id: root\n' + probe, 1).replace('    IpcHandler {', '    IpcHandler {\n        id: testIpc', 1))
             (folder / 'shell.qml').write_text('''
 import QtQuick
 import Quickshell
