@@ -29,7 +29,7 @@ def execute(action, state_dir):
     if entry['kind'] == 'plugin' and result.stdout.strip() != 'ok':
         raise ValueError('That plugin could not be opened. Check that it is enabled.')
     return {'text': ('Theme applied: ' if entry['kind'] == 'theme' else 'Open request accepted: ')
-            + entry['target'], 'emote': 'working', 'action': ''}
+            + entry['target'], 'emote': 'working', 'action': '', 'route': 'local'}
 
 
 def maintenance(message, state_dir, normalize):

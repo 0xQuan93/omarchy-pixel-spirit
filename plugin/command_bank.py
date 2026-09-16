@@ -146,11 +146,16 @@ def scan(state_dir=None, config_dir=None, system_dir=None):
             for name in {themes[target], target}:
                 for prefix in ('change theme to ', 'change the theme to ', 'change my theme to ', 'switch theme to ', 'switch the theme to ', 'switch my theme to ', 'set theme to ', 'set the theme to ', 'set my theme to ', 'use theme ', 'use the theme '):
                     add(prefix + name, descriptor)
+                for template in ('apply the {} theme', 'apply {} theme', 'switch to the {} theme',
+                                 'switch to {} theme', 'use {} as my theme', 'make {} my theme'):
+                    add(template.format(name), descriptor)
         else:
             for name in {plugins[target]['name'].lower(), target}:
-                for prefix in ('open ', 'show ', 'launch ', 'bring up '):
+                for prefix in ('open ', 'show ', 'launch ', 'bring up ', 'pull up ',
+                               'show me ', 'take me to ', 'let me see '):
                     add(prefix + name, descriptor)
                     add(prefix + name + ' plugin', descriptor)
+                    add(prefix + 'the ' + name + ' plugin', descriptor)
     personal = read_json(state / PERSONAL, [])
     if isinstance(personal, list):
         for alias in personal[:LIMIT]:

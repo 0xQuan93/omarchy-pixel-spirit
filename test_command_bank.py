@@ -42,6 +42,18 @@ class CommandBankTests(unittest.TestCase):
         self.assertIsNone(bank.match('open weather', **self.kw))
         with self.assertRaises(ValueError): bank.resolve(descriptor, **self.kw)
 
+    def test_everyday_named_requests_keep_exact_target_and_direction(self):
+        self.plugin()
+        for phrase in ('show me the weather plugin', 'pull up weather',
+                       'let me see weather', 'take me to weather plugin'):
+            self.assertEqual(bank.match(phrase, **self.kw)['target'], 'demo.weather')
+        for phrase in ('apply the Tokyo Night theme', 'use Tokyo Night as my theme',
+                       'switch to Tokyo Night theme', 'make Tokyo Night my theme'):
+            self.assertEqual(bank.match(phrase, **self.kw)['target'], 'tokyo-night')
+        for phrase in ('close weather', 'hide weather', 'take me to weather later',
+                       'do not apply the Tokyo Night theme', 'show me weather and open files'):
+            self.assertIsNone(bank.match(phrase, **self.kw))
+
     def test_bar_and_service_do_not_create_unsafe_open_alias(self):
         for kind in ('bar-widget', 'service'):
             self.plugin(kinds=[kind])
