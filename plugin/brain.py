@@ -19,7 +19,17 @@ def save(name, data):
  from storage import put
  put(BASE/name, data, preserve_previous=bool(data))
 
+def plan_available(action):
+ return action in ACTIONS and bool(shutil.which(ACTIONS[action][0]))
+def compound_intent(message):
+ import command_plans
+ single=local_intent(message)
+ if single and single.get('action'):return single
+ return command_plans.proposal(message,BASE,ACTIONS,LABELS,normalize,smart_match,local_intent,plan_available)
 def execute(action):
+ if isinstance(action,str) and action.startswith('plan:'):
+  import command_plans
+  return command_plans.execute(action,BASE,ACTIONS,LABELS,plan_available,execute)
  if isinstance(action,str) and action.startswith('param:'):return parameter_commands.execute(action)
  if isinstance(action,str) and action.startswith('bank:'):return command_routes.execute(action,BASE)
  if action not in ACTIONS: raise ValueError('Unsupported desktop action')
@@ -54,6 +64,9 @@ def local_intent(message):
 def chat(message, eco=False):
  message = message.strip()[:4000]
  if not message: raise ValueError('Say something first.')
+ if not smart_match(message):
+  composed=compound_intent(message)
+  if composed is not None:return composed
  local_reply=parameter_commands.proposal(message)
  if local_reply:return local_reply
  local_reply=command_routes.maintenance(message,BASE,normalize)

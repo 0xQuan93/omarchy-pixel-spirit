@@ -55,6 +55,16 @@ If you say **“close it,”** Wisp asks which target and offers up to four numb
 
 Conflicting interpretations ask rather than pick by pattern order. Meaningful source, timing, amount, negation and playback-preservation constraints cannot be silently dropped. Missing tools get a local explanation. Broader conversation still uses the model. There is no automatic alias learning or transcript collection in this layer. See [intent routing](docs/INTENT-ROUTING.md) for extension contracts and tests.
 
+## Local multi-step requests (1.6)
+
+**“Open the browser and the terminal,” “open files then lower the volume,”** and **“open settings and mute the audio”** prepare a numbered plan without calling a model. Up to four explicit steps can be joined with **and**, **then**, or **but**; an **and** target list can share its opening verb. Tap **Run plan** to execute the reviewed sequence.
+
+Every step must resolve to a supported fixed action before a plan is offered. Unknown targets, ambiguous pronouns, conditions, conflicting instructions, and unsupported operations get a local explanation with no partial execution. Focus-dependent window actions and toggles require separate requests. Named themes and discovered plugin panels remain individual commands for now.
+
+Plans expire after five minutes, can run once, and stop at the first failed step with a completion summary. Preparing a newer plan replaces the older one. Cancel clears the preview. Availability is checked before execution, but runtime failures can still occur; completed steps are not rolled back or retried. Ordinary conversation still uses local AI.
+
+Source-specific media integrations can provide reviewed fixed actions and an adapter that starts a source muted before audio is loaded. Generic system mute is never substituted for an unsupported source-specific mute request. These integrations depend on the installed player; public Wisp does not assume a particular cartoon or radio plugin exists.
+
 ## Everyday commands and your personal bank (1.3)
 
 Common requests use a deterministic phrase bank before Ollama. No model is needed for **“change my theme,” “change wallpaper,” “open audio settings,” “show keyboard shortcuts,” “clipboard history,” “keep my computer awake,”** or **“show the bar.”** Public Wisp keeps the existing **Run** review step. A theme request without a name opens the native chooser; **“change my theme to Tokyo Night”** offers that exact installed theme. Background, font, app, plugin, default-app, learning, capture, recording, install, update and power menus are included. Opening a menu does not choose its options for you.

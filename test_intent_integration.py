@@ -29,6 +29,18 @@ class IntentIntegrationTests(unittest.TestCase):
                 else:self.assertTrue(reply['choices']);self.assertLessEqual(len(reply['choices']),4)
                 execute.assert_not_called();model.assert_not_called()
 
+    def test_compound_plan_never_executes_or_calls_model(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, patch.object(brain,'BASE',Path(d)), \
+             patch.object(brain.shutil,'which',return_value='/test/tool'), \
+             patch.object(brain,'execute') as execute, \
+             patch('inference.request',side_effect=AssertionError('model')) as model:
+            reply=brain.chat('open browser and terminal')
+            self.assertEqual(reply['route'],'local')
+            self.assertEqual([s['action'] for s in reply['steps']],['browser','terminal'])
+            self.assertTrue(reply['action'].startswith('plan:'))
+            execute.assert_not_called();model.assert_not_called()
+
     def test_unavailable_composed_command_is_local_failure(self):
         with patch.object(brain.shutil,'which',return_value=None):
             result=brain.local_intent('just open my clipboard')

@@ -115,6 +115,15 @@ Item {
     property string pending: ""
     property string pendingLabel: ""
     property var commandChoices: []
+    property var planSteps: []
+    readonly property bool pendingPlan: /^plan:[0-9a-f]{32}$/.test(pending)
+    onPendingChanged: if(!/^plan:[0-9a-f]{32}$/.test(pending))planSteps=[]
+    onCommandChoicesChanged: if(commandChoices.length)planSteps=[]
+    function previewPlanSteps(action,steps) {
+        if(!/^plan:[0-9a-f]{32}$/.test(action) || !Array.isArray(steps) || steps.length<1 || steps.length>4)return []
+        if(!steps.every(function(step){return step && typeof step.action==="string" && step.action.length>0 && step.action.length<=200 && typeof step.label==="string" && step.label.length>0 && step.label.length<=160}))return []
+        return steps.map(function(step){return {action:step.action,label:step.label}})
+    }
     onReplyChanged: commandChoices=[]
     function clarificationChoices(data) {
         if(!Array.isArray(data))return []
@@ -129,7 +138,7 @@ Item {
             reply="Cancelled. Nothing was run.";return true
         }
         if(pending && key==="yes"){
-            responseSource="local";reply="Review the command below, then tap Run.";return true
+            responseSource="local";reply=pendingPlan?"Review each step below, then tap Run plan.":"Review the command below, then tap Run.";return true
         }
         if(!commandChoices.length)return false
         var choices=commandChoices.slice()
@@ -204,7 +213,7 @@ Item {
     function send() {
         if (busy || !field.text.trim()) return
         if(handleCommandChoiceReply(field.text)){field.text="";return}
-        commandChoices=[];journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
+        commandChoices=[];planSteps=[];journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
         brain.run(["chat",field.text,eco?"eco":"normal"]); field.text=""
     }
     IpcHandler {
@@ -226,7 +235,7 @@ Item {
         function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({responseSource:root.responseSource,pending:root.pending,pendingLabel:root.pendingLabel,choiceCount:root.commandChoices.length,hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
+        function status(): string { return JSON.stringify({responseSource:root.responseSource,pending:root.pending,pendingLabel:root.pendingLabel,choiceCount:root.commandChoices.length,planStepCount:root.planSteps.length,hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.toggle()}}
@@ -333,7 +342,7 @@ Item {
     }
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
-    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
+    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.planSteps=!d.error?root.previewPlanSteps(root.pending,d.steps):[];root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
     Call { id: actor; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(!d.error){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
     Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.reply="Transcribing your recording locally…" } }
     Call { id: listener; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
@@ -450,7 +459,7 @@ Item {
                     Action {text:"Hide";onClicked:{root.showPanel("");root.hidden=true;root.persist()}}
                 }
                 Flickable {
-                    width:parent.width;height:root.journalOpen?180:root.commandChoices.length>0?Math.min(130,Math.max(44,answer.implicitHeight)):130;contentHeight:answer.implicitHeight;clip:true
+                    width:parent.width;height:root.journalOpen?180:(root.commandChoices.length>0 || root.planSteps.length>0)?Math.min(130,Math.max(44,answer.implicitHeight)):130;contentHeight:answer.implicitHeight;clip:true
                     boundsBehavior:Flickable.StopAtBounds;Controls.ScrollBar.vertical:Controls.ScrollBar {}
                     Text {id:answer;width:parent.width-8;text:!root.stateReady?(root.restoreError||"Restoring your saved companion…"):root.journalOpen?(root.growthError||Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")):root.reply;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
                 }
@@ -497,8 +506,34 @@ Item {
                 Column {
                     visible:!!root.pending;width:parent.width;spacing:6
                     Text {width:parent.width;text:root.pendingLabel;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                    Flickable {
+                        visible:root.pendingPlan && root.planSteps.length>0
+                        width:parent.width;height:Math.min(planList.implicitHeight,150)
+                        contentHeight:planList.implicitHeight;clip:true
+                        boundsBehavior:Flickable.StopAtBounds
+                        Controls.ScrollBar.vertical:Controls.ScrollBar {}
+                        Column {
+                            id:planList;width:parent.width-8;spacing:6
+                            Repeater {
+                                model:root.planSteps
+                                Ui.BorderSurface {
+                                    required property var modelData
+                                    required property int index
+                                    width:planList.width;height:planStepLabel.implicitHeight+16
+                                    color:Qt.alpha(Color.accent,0.035);radius:Style.cornerRadius
+                                    borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)
+                                    Text {
+                                        id:planStepLabel;x:8;y:8;width:parent.width-16
+                                        text:(parent.index+1)+". "+parent.modelData.label;textFormat:Text.PlainText
+                                        wrapMode:Text.Wrap;color:Color.foreground
+                                        font.family:Style.font.family;font.pixelSize:Style.font.bodySmall
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Row {spacing:6
-                        Action {text:actor.busy?"Running…":"Run";enabled:!root.busy;onClicked:{root.mood="working";actor.run(["action",root.pending])}}
+                        Action {text:actor.busy?"Running…":root.pendingPlan?"Run plan":"Run";enabled:!root.busy && (!root.pendingPlan || root.planSteps.length>0);onClicked:{root.mood="working";actor.run(["action",root.pending])}}
                         Action {text:"Cancel";enabled:!root.busy;onClicked:{root.pending="";root.pendingLabel="";root.reply="Cancelled. Nothing was run."}}
                     }
                 }

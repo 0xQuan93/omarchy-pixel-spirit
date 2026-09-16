@@ -190,10 +190,40 @@ class CommandUiTests(unittest.TestCase):
             if(root.commandChoices.length)Qt.exit(36);
             field.text="second one";root.send();
             if(brain.requests.length!==2 || root.pending || actor.requests.length)Qt.exit(43);
+            testPlan.start();
+        });
+    }}
+    property string planTestToken:"plan:"+"a".repeat(32)
+    property var planTestSteps:[{action:"theme_picker",label:"Open the theme picker"},{action:"volume_down",label:"Lower the speaker volume"},{action:"dnd_on",label:"Quiet notifications"},{action:"browser",label:"Open the browser"}]
+    function planResponse(){return {text:"Ready to run these four steps in order. Review the plan before continuing.",route:"local",action:planTestToken,actionLabel:"Run 4 steps",steps:planTestSteps}}
+    Timer {id:testPlan;interval:100;onTriggered:{
+        brain.received(planResponse());
+        if(root.planSteps.length!==4 || !root.pendingPlan || JSON.parse(testIpc.status()).planStepCount!==4 || actor.requests.length)Qt.exit(50);
+        testIpc.ask("Yes, please.");
+        if(root.planSteps.length!==4 || root.pending!==planTestToken || actor.requests.length)Qt.exit(51);
+        findButton(chatContent,"Cancel").clicked();
+        if(root.planSteps.length || root.pending || actor.requests.length)Qt.exit(52);
+        brain.received(planResponse());testPlanRun.start();
+    }}
+    Timer {id:testPlanRun;interval:100;onTriggered:{
+        checkBounds(chatContent);
+        chatSurface.grabToImage(function(r){
+            r.saveToFile(PLAN_PATH);
+            var run=findButton(chatContent,"Run plan");if(!run || !run.enabled)Qt.exit(53);
+            run.clicked();
+            if(actor.requests.length!==1 || actor.requests[0][0]!=="action" || actor.requests[0][1]!==planTestToken)Qt.exit(54);
+            actor.received({text:"Completed the plan.",action:"",route:"local"});
+            if(root.planSteps.length || root.pending)Qt.exit(55);
+            brain.received(planResponse());field.text="another request";root.send();
+            if(root.planSteps.length || root.pending || actor.requests.length!==1)Qt.exit(56);
+            var invalid=planResponse();invalid.steps=planTestSteps.concat([{action:"extra",label:"Hidden fifth step"}]);brain.received(invalid);
+            if(root.planSteps.length || findButton(chatContent,"Run plan").enabled)Qt.exit(57);
+            brain.received(planResponse());brain.received({text:"Choose an option",action:"",choices:[{action:"browser",label:"Open browser"}],route:"local"});
+            if(root.planSteps.length)Qt.exit(58);
             console.log("COMMAND_UI_OK");Qt.quit();
         });
     }}
-'''.replace('CHAT_PATH', json.dumps(str(capture / 'wisp-chat.png'))).replace('COMMANDS_PATH', json.dumps(str(capture / 'wisp-commands.png'))).replace('BUBBLE_PATH', json.dumps(str(capture / 'wisp-preview-bubble.png'))).replace('CHOICES_PATH', json.dumps(str(capture / 'wisp-clarification.png')))
+'''.replace('CHAT_PATH', json.dumps(str(capture / 'wisp-chat.png'))).replace('COMMANDS_PATH', json.dumps(str(capture / 'wisp-commands.png'))).replace('BUBBLE_PATH', json.dumps(str(capture / 'wisp-preview-bubble.png'))).replace('CHOICES_PATH', json.dumps(str(capture / 'wisp-clarification.png'))).replace('PLAN_PATH', json.dumps(str(capture / 'wisp-plan.png')))
             desktop.write_text(desktop.read_text().replace('    id: root', '    id: root\n' + probe, 1).replace('    IpcHandler {', '    IpcHandler {\n        id: testIpc', 1))
             (folder / 'shell.qml').write_text('''
 import QtQuick
