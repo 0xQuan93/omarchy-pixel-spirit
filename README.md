@@ -32,6 +32,33 @@ Ambient observation/generation pauses on battery, power saver, idle, lock, fulls
 
 **More → Tools** exposes the actual fixed action catalogue and missing executables. Common supported requests route directly without relying on model judgment, while more varied language uses the catalogue in the model prompt. Tools still require Run and report their actual result; the model cannot execute arbitrary commands. Workspace navigation uses the current Omarchy/Hyprland Lua dispatch API. Media controls use Omarchy’s native media service and report unhandled actions; no playerctl dependency is needed. Obsidian and Do Not Disturb are included when available.
 
+## Everyday commands and your personal bank (1.3)
+
+Common requests use a deterministic phrase bank before Ollama. No model is needed for **“change my theme,” “change wallpaper,” “open audio settings,” “show keyboard shortcuts,” “clipboard history,” “keep my computer awake,”** or **“show the bar.”** Public Wisp keeps the existing **Run** review step. A theme request without a name opens the native chooser; **“change my theme to Tokyo Night”** offers that exact installed theme. Background, font, app, plugin, default-app, learning, capture, recording, install, update and power menus are included. Opening a menu does not choose its options for you.
+
+The built-in bank contains 2,101 whole-utterance phrases for 52 actions. Polite wrappers are supported; quoted, negated, conditional, delayed and compound prose does not match a built-in command. **“Toggle night light”** intentionally means toggle; on/off wording is not silently converted to a toggle. Unsupported wording still uses normal chat. Say **“list commands”** for the fixed catalogue.
+
+A built-in metadata scanner runs during development installation and on first enable/restore for normal `omarchy plugin add` installations. It discovers installed theme directories and plugin manifests from Omarchy’s system and user directories. It does not import plugin code, execute manifest commands, inspect conversations, call a model, install anything, or send inventory over the network. Matching refreshes this bounded inventory, so later additions and removals are picked up too. Supported enabled `panel`, `overlay` and `menu` plugins gain exact **“open <name>”** phrases; bar-only/service plugins remain visible in the inventory because their click behavior is not guaranteed to open a panel. The desktop must accept a panel request before Wisp reports it accepted.
+
+Say **“scan plugins,” “list my plugins,”** or **“list themes.”** You can also run the scanner directly:
+
+```sh
+python3 ~/.config/omarchy/plugins/oxquan.pixel-spirit/plugin/command_bank.py scan
+```
+
+Development copies installed by `install.py` have a flat layout: omit `/plugin` from that path. The generated bank lives in `~/.local/state/pixel-spirit/generated-command-bank.json` (or the XDG state root). It is rebuilt from metadata, never trusted as executable input. Scans examine at most 512 plugin manifest candidates (256 reserved for user plugins), 512 theme entries per root and 128 KiB per JSON input. Malformed metadata is skipped. Duplicate names pointing at different targets are omitted; built-in phrases take precedence. Each execution revalidates the installed target, so stale Run buttons cannot invoke a removed theme or plugin. Plugin enabled state is checked from configuration and ultimately by the running shell.
+
+Optional personal aliases belong in the separate `personal-command-bank.json`, which rescans and upgrades preserve:
+
+```json
+[
+  {"phrase": "use my evening colors", "kind": "theme", "target": "tokyo-night"},
+  {"phrase": "open my weather panel", "kind": "plugin", "target": "example.weather"}
+]
+```
+
+Only discovered themes and supported enabled panels are valid targets; aliases cannot supply commands or arguments. These example targets must exist on your own machine. This bank is local to each installation and is not shipped or synced with Wisp. No new daemon, cloud service, or package dependency is added.
+
 ## Mouse, activity and reminders
 
 ### Mouse and activity responses (1.2)

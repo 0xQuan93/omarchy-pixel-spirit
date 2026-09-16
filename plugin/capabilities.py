@@ -42,3 +42,11 @@ def catalogue():
           'requires':argv[0]} for key,argv in ACTIONS.items()]
 
 MEDIA_ACTIONS = {'pause_music','play_music','play_pause','next_track'}
+
+# Portable Omarchy destinations, shared with personal overlays.
+from desktop_commands import ACTIONS as DESKTOP_ACTIONS, LABELS as DESKTOP_LABELS
+ACTIONS.update(DESKTOP_ACTIONS)
+LABELS.update(DESKTOP_LABELS)
+ACTIONS['previous_track'] = ['omarchy','shell','media','previous']
+LABELS['previous_track'] = 'Previous track'
+MEDIA_ACTIONS.add('previous_track')

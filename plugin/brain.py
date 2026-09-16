@@ -5,6 +5,8 @@ from pathlib import Path
 BASE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state'))) / 'pixel-spirit'
 MODEL = os.environ.get('PIXEL_SPIRIT_MODEL', 'qwen3.5:4b')
 from capabilities import ACTIONS, LABELS, MEDIA_ACTIONS, catalogue
+from smart_commands import match as smart_match, normalize
+import command_routes
 
 EMOTES = ['idle','thinking','working','playing','reading','happy','sleeping']
 def run(args, timeout=8):
@@ -17,9 +19,12 @@ def save(name, data):
  put(BASE/name, data, preserve_previous=bool(data))
 
 def execute(action):
+ if isinstance(action,str) and action.startswith('bank:'):return command_routes.execute(action,BASE)
  if action not in ACTIONS: raise ValueError('Unsupported desktop action')
  if not shutil.which(ACTIONS[action][0]):raise ValueError('This tool needs '+ACTIONS[action][0]+'. It is not installed.')
  result=run(ACTIONS[action])
+ from desktop_commands import IPC_ACTIONS
+ if action in IPC_ACTIONS and result.strip()!='ok':raise ValueError('The desktop did not accept that request. Check that its plugin is enabled.')
  if action in MEDIA_ACTIONS and result.strip()!='ok':raise ValueError('No media player could handle that action. Open a controllable music or video player first.')
  return {'text': 'Done · '+action.replace('_',' '), 'emote':'working','action':''}
 def context():
@@ -29,45 +34,21 @@ def context():
   except Exception: result[key] = 'unavailable'
  return result
 def direct_action(message):
- # Anchored commands only: quoted, negated and conditional prose goes to chat.
- text = message.strip().lower().rstrip('.!?')
- text = re.sub(r'^(?:(?:please|can you|could you|would you|will you) )+', '', text)
- text = re.sub(r',? please$', '', text)
- phrases = {
-  'volume_down': ['lower volume','decrease volume','make it quieter','turn down the audio','turn the volume down','turn down the volume','lower the volume','volume down'],
-  'volume_up': ['raise volume','increase volume','make it louder','turn up the audio','turn the volume up','turn up the volume','raise the volume','volume up'],
-  'mute': ['mute','mute the audio'],
-  'unmute': ['unmute','unmute the audio'],
-  'toggle_mute': ['toggle mute'],
-  'browser': ['open a browser','open the browser','open browser'],
-  'terminal': ['open a terminal','open the terminal','open terminal'],
-  'files': ['open files','open the file manager','open file manager','open the file explorer','open file explorer'],
-  'notes': ['open notes','open obsidian','open my notes'],
-  'reminders': ['open reminders','show reminders','show my reminders','open timers'],
-  'dnd_on': ['quiet notifications','enable do not disturb','turn on do not disturb'],
-  'dnd_off': ['resume notifications','disable do not disturb','turn off do not disturb'],
-  'pause_music': ['pause music','pause the music'],
-  'play_music': ['play music','resume music'],
-  'play_pause': ['toggle playback'],
-  'next_track': ['next track','skip this track','skip this song'],
-  'brightness_down': ['lower the brightness','brightness down','dim the screen'],
-  'brightness_up': ['raise the brightness','brightness up','brighten the screen'],
-  'workspace_next': ['next workspace','go to the next workspace'],
-  'workspace_previous': ['previous workspace','go to the previous workspace'],
-  'power_saver': ['enable power saver','switch to power saver','turn on power saver'],
-  'power_balanced': ['switch to balanced power','use balanced power'],
- }
- text=re.sub(r'^(launch|start|bring up) ', 'open ', text)
- return next((action for action, variants in phrases.items() if text in variants), '')
+ return smart_match(message, ACTIONS)
 def chat(message, eco=False):
  message = message.strip()[:4000]
  if not message: raise ValueError('Say something first.')
+ local_reply=command_routes.maintenance(message,BASE,normalize)
+ if local_reply:return local_reply
+ if not direct_action(message):
+  local_reply=command_routes.proposal(message,BASE)
+  if local_reply:return local_reply
  from reminders import parse_request
  draft=parse_request(message)
  if draft:
   return {'text':'Ready to set your reminder. Check the details and tap Set reminder.', 'emote':'working','action':'','reminderDraft':draft}
  history = read('history.json', [])[-8:]
- if message.lower().rstrip('.?!') in ['what can you do','what tools do you have','list tools','show tools','help']:
+ if message.lower().rstrip('.?!') in ['what can you do','what tools do you have','list tools','show tools','help','list commands','show commands','command library']:
   text='I can propose these tools; choose one and tap Run:\n'+ '\n'.join(t['label']+('' if t['available'] else ' (needs '+t['requires']+')') for t in catalogue())
   return {'text':text,'emote':'reading','action':''}
  action = direct_action(message)
@@ -193,6 +174,9 @@ def main():
   from awareness import reflect
   return reflect()
  if command=='restore':
+  # Marketplace installs skip install.py; first enable builds the local bank.
+  try: command_routes.command_bank.scan(state_dir=BASE)
+  except (OSError,ValueError):pass
   from identity import profile
   from playroom import update
   from growth import view, scan

@@ -34,5 +34,7 @@ if '--remove' not in sys.argv:
   target=home/'.local/share/pixel-spirit/ggml-tiny.en.bin'
   target.parent.mkdir(parents=True,exist_ok=True)
   if not target.exists():shutil.copy2(model,target)
+if '--remove' not in sys.argv:
+ subprocess.run([sys.executable,'-B',str(plugin/'command_bank.py'),'scan'],check=True)
 write(shell,(json.dumps(data,indent=2)+'\n').encode())
 print('Wisp '+('removed from shell configuration' if '--remove' in sys.argv else 'installed')+'. Config backups: .before-wisp-'+stamp)
