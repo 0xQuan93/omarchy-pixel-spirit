@@ -58,6 +58,19 @@ class CommandUiTests(unittest.TestCase):
     }
     function snapshotTest() {
         if(win.width!==360 || chatContent.width!==328)Qt.exit(2);
+        // Stored model failures are status metadata, not failed transport.
+        var historyStatus=Object.assign({},root.awareness,{settings:Object.assign({},root.awareness.settings,{enabled:false}),error:"Historical model failure",due:true});
+        observer.received(historyStatus);
+        if(root.awareness.error!=="Historical model failure" || !root.reflectionDue)Qt.exit(24);
+        var previousAwareness=root.awareness;
+        observer.received({error:"Transport unavailable"});
+        if(root.awareness!==previousAwareness || !root.reflectionDue)Qt.exit(25);
+        var settingsStatus=Object.assign({},historyStatus,{error:"Previous model attempt failed"});
+        awarenessConfig.received(settingsStatus);
+        if(root.awareness.error!=="Previous model attempt failed")Qt.exit(26);
+        previousAwareness=root.awareness;
+        awarenessConfig.received({error:"Transport unavailable"});
+        if(root.awareness!==previousAwareness)Qt.exit(27);
         checkBounds(chatContent);
         chatSurface.grabToImage(function(r) {
             r.saveToFile(CHAT_PATH);

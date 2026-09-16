@@ -210,9 +210,9 @@ Item {
     Timer { interval:root.eco?1800000:600000; running:!root.busy; repeat:true; onTriggered:growthCall.run(["growth"]) }
     Call { id: saver }
     Call {id:toolCall;onReceived:function(d){if(!d.error)root.tools=d.tools}}
-    Call {id:awarenessConfig;onReceived:function(d){if(d.error)root.awarenessDetail=d.error;else{root.awareness=d;root.awarenessDetail=""}}}
+    Call {id:awarenessConfig;onReceived:function(d){if(d.error && !d.settings)root.awarenessDetail=d.error;else{root.awareness=d;root.awarenessDetail=d.error||""}}}
     Call {id:observer;onReceived:function(d){
-        if(d.error){root.awarenessDetail=d.error;return}
+        if(d.error && !d.settings){root.awarenessDetail=d.error;return}
         root.awareness=d;if(d.growth)root.growth=d.growth;root.awarenessDetail=d.quiet||""
         root.reflectionDue=!!d.due
         if(root.reflectionDue && root.commentAllowed && !root.asideVisible && !reflection.busy){root.reflectionDue=false;reflection.run(["reflect"])}
