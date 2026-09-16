@@ -14,7 +14,7 @@ def proposal(message, state_dir):
     if entry is None:
         return None
     return {'text': 'Ready: ' + entry['label'] + '. Tap Run below.',
-            'emote': 'working', 'action': action_id(entry)}
+            'emote': 'working', 'action': action_id(entry), 'actionLabel': entry['label'], 'route':'local'}
 
 
 def execute(action, state_dir):
@@ -50,4 +50,4 @@ def maintenance(message, state_dir, normalize):
                   'Say “list my plugins” or “list themes” to inspect them.')
     if bank.get('persistence_warning'):
         detail += '\nThe bank is usable now but could not be saved to the state directory.'
-    return {'text': detail, 'emote': 'reading', 'action': ''}
+    return {'text': detail, 'emote': 'reading', 'action': '', 'route':'local'}

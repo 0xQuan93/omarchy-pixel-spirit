@@ -35,11 +35,23 @@ PanelWindow {
             Row {
                 width:parent.width;spacing:6
                 Action {text:"Thoughts";selected:panel.page==="thoughts";onClicked:panel.page="thoughts"}
-                Action {text:"Tools";selected:panel.page==="tools";onClicked:panel.page="tools"}
+                Action {text:"Commands";selected:panel.page==="tools";onClicked:panel.page="tools"}
                 Action {text:"Settings";selected:panel.page==="settings";onClicked:panel.page="settings"}
                 Action {text:"Close";onClicked:panel.closeRequested()}
             }
+            CommandBrowser {
+                id: commandBrowser
+                visible: panel.page === "tools"
+                width: parent.width
+                height: parent.height - 48
+                tools: panel.tools
+                busy: panel.busy
+                onPropose: function(action, label) { panel.propose(action, label); }
+                onCloseRequested: panel.closeRequested()
+                onVisibleChanged: if (visible) Qt.callLater(focusSearch)
+            }
             Flickable {
+                visible: panel.page !== "tools"
                 width:parent.width;height:parent.height-48;clip:true;contentHeight:body.implicitHeight
                 boundsBehavior:Flickable.StopAtBounds
                 Controls.ScrollBar.vertical:Controls.ScrollBar {}
@@ -72,22 +84,6 @@ PanelWindow {
                             Text {width:body.width;text:"Sampled active minutes\n"+(Object.keys(panel.state.minutes).map(function(k){return k+" "+panel.state.minutes[k]}).join(" · ")||"None yet");wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
                             Repeater {model:panel.state.events.slice(0,5)
                                 Text {required property var modelData;width:body.width;text:modelData.app+" · "+new Date(modelData.at*1000).toLocaleTimeString();elide:Text.ElideRight;color:Color.foreground;opacity:0.65;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
-                            }
-                        }
-                    }
-                    Column {
-                        visible:panel.page==="tools";width:parent.width;spacing:16
-                        Text {width:parent.width;text:"Choose a tool, then confirm with Run in chat.";wrapMode:Text.Wrap;color:Color.foreground;opacity:0.7;font.family:Style.font.family;font.pixelSize:Style.font.body}
-                        Repeater {
-                            model:[{name:"Open",ids:["browser","terminal","files","notes"]},{name:"Sound",ids:["volume_up","volume_down","mute","unmute","toggle_mute","pause_music","play_music","play_pause","next_track"]},{name:"Desktop",ids:["workspace_next","workspace_previous","brightness_up","brightness_down","power_saver","power_balanced","dnd_on","dnd_off"]}]
-                            Column {
-                                required property var modelData;width:body.width;spacing:6
-                                Text {text:modelData.name;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.caption}
-                                Grid {width:parent.width;columns:2;columnSpacing:8;rowSpacing:5
-                                    Repeater {model:panel.tools.filter(function(t){return modelData.ids.indexOf(t.id)>=0})
-                                        Action {required property var modelData;width:(body.width-8)/2;leftAlign:true;text:modelData.label;enabled:modelData.available;tooltipText:modelData.available?"":"Needs "+modelData.requires;onClicked:panel.propose(modelData.id,modelData.label)}
-                                    }
-                                }
                             }
                         }
                     }

@@ -115,6 +115,202 @@ _add('bar_show', 'show the bar', 'show the status bar', 'show the top bar')
 _add('bar_hide', 'hide the bar', 'hide the status bar', 'hide the top bar')
 _add('nightlight_toggle', 'toggle night light', 'toggle nightlight', 'toggle night mode')
 
+# Destination-specific vocabulary helps beginners describe the same control in
+# their own words. These are complete requests, not substring triggers. Menu
+# actions open a chooser; they do not infer a user's final choice.
+_DESTINATIONS = {
+    'browser': ('browser', 'the browser', 'my browser', 'a browser', 'the web browser', 'my web browser', 'a web browser', 'the internet browser', 'my default browser', 'the default browser'),
+    'terminal': ('terminal', 'the terminal', 'a terminal', 'my terminal', 'a terminal window', 'the terminal window', 'a new terminal', 'a new terminal window', 'the command line', 'my command line'),
+    'files': ('files', 'my files', 'the file manager', 'my file manager', 'file manager', 'file explorer', 'the file explorer', 'my file explorer', 'the files app', 'the file browser'),
+    'notes': ('notes', 'my notes', 'obsidian', 'the notes app', 'my notes app', 'the obsidian app', 'my obsidian app', 'the note taking app'),
+    'reminders': ('reminders', 'my reminders', 'timers', 'my timers', 'the reminders panel', 'the timers panel', 'the reminder list', 'my reminder list', 'my scheduled reminders', 'the timer controls'),
+    'theme_picker': ('themes', 'the themes', 'theme picker', 'the theme picker', 'theme chooser', 'the theme chooser', 'theme selector', 'the theme selector', 'theme options', 'my theme options', 'available themes', 'the available themes', 'desktop themes', 'omarchy themes', 'theme selection'),
+    'background_picker': ('wallpapers', 'backgrounds', 'the wallpapers', 'the backgrounds', 'wallpaper picker', 'the wallpaper picker', 'background picker', 'the background picker', 'wallpaper options', 'background options', 'available wallpapers', 'desktop backgrounds', 'wallpaper selection'),
+    'font_picker': ('fonts', 'the fonts', 'font picker', 'the font picker', 'font chooser', 'the font chooser', 'font options', 'font selection', 'available fonts', 'the available fonts', 'font settings', 'desktop fonts'),
+    'settings': ('settings', 'the settings', 'my settings', 'system settings', 'the system settings', 'desktop settings', 'the desktop settings', 'omarchy settings', 'the settings menu', 'system configuration', 'desktop configuration'),
+    'settings_audio': ('audio settings', 'the audio settings', 'sound settings', 'the sound settings', 'volume settings', 'the volume settings', 'audio controls', 'the audio controls', 'sound controls', 'the sound controls', 'sound devices', 'audio devices', 'the audio panel', 'speaker settings', 'microphone settings', 'audio output settings', 'audio input settings'),
+    'settings_bluetooth': ('bluetooth', 'bluetooth settings', 'the bluetooth settings', 'bluetooth controls', 'the bluetooth controls', 'bluetooth devices', 'my bluetooth devices', 'the bluetooth panel', 'bluetooth configuration', 'bluetooth connections', 'my bluetooth connections'),
+    'settings_network': ('network settings', 'the network settings', 'wifi settings', 'the wifi settings', 'wi-fi settings', 'wireless settings', 'wireless networks', 'wifi networks', 'available networks', 'network connections', 'the network connections', 'my network connections', 'the network panel', 'internet settings', 'connection settings'),
+    'settings_display': ('display settings', 'the display settings', 'monitor settings', 'the monitor settings', 'screen settings', 'the screen settings', 'display controls', 'monitor controls', 'the display panel', 'the monitor panel', 'monitor configuration', 'display configuration'),
+    'appearance': ('appearance', 'appearance settings', 'the appearance settings', 'desktop appearance', 'desktop appearance settings', 'style settings', 'the style settings', 'the style menu', 'customization options', 'desktop customization', 'the appearance menu'),
+    'plugins': ('plugins', 'my plugins', 'the plugins', 'plugin settings', 'the plugin settings', 'plugin manager', 'the plugin manager', 'plugin management', 'plugin options', 'the plugin menu', 'installed plugins', 'the installed plugins'),
+    'keybindings': ('keybindings', 'my keybindings', 'the keybindings', 'keyboard shortcuts', 'the keyboard shortcuts', 'my keyboard shortcuts', 'shortcut help', 'the shortcuts list', 'the keybindings list', 'keybinding help', 'keyboard shortcut help', 'omarchy shortcuts'),
+    'launcher': ('launcher', 'the launcher', 'app launcher', 'the app launcher', 'application launcher', 'the application launcher', 'applications', 'my applications', 'the applications menu', 'the apps menu', 'my apps'),
+    'clipboard': ('clipboard', 'the clipboard', 'my clipboard', 'clipboard history', 'the clipboard history', 'my clipboard history', 'clipboard manager', 'the clipboard manager', 'copied items', 'my copied items', 'recently copied items'),
+    'emoji': ('emoji picker', 'the emoji picker', 'emoji selector', 'the emoji selector', 'emojis', 'the emojis', 'emoji menu', 'the emoji menu', 'emoji selection'),
+    'bar_settings': ('bar settings', 'the bar settings', 'status bar settings', 'the status bar settings', 'top bar settings', 'the top bar settings', 'bar configuration', 'status bar configuration', 'bar options'),
+    'default_apps': ('default apps', 'the default apps', 'default applications', 'my default applications', 'my default apps', 'default app settings', 'default application settings', 'default app preferences', 'default program settings'),
+    'power_menu': ('power menu', 'the power menu', 'power options', 'the power options', 'the system menu', 'shutdown options', 'the shutdown options', 'restart options', 'logout options'),
+    'install_menu': ('install menu', 'the install menu', 'software installer', 'the software installer', 'installation options', 'the installation options', 'app installation options', 'software installation options', 'the software installation menu'),
+    'update_menu': ('update menu', 'the update menu', 'updates', 'the updates', 'update options', 'the update options', 'system update options', 'software update options', 'the system update menu'),
+    'learn_menu': ('learn menu', 'the learn menu', 'omarchy help', 'omarchy tutorials', 'learning resources', 'the learning resources', 'omarchy learning resources', 'the help menu', 'omarchy documentation', 'omarchy guides'),
+    'capture_menu': ('capture menu', 'the capture menu', 'screenshot menu', 'the screenshot menu', 'screen capture options', 'the screen capture options', 'capture options', 'screenshot options', 'the screenshot options'),
+    'recording_menu': ('recording menu', 'the recording menu', 'screen recording menu', 'the screen recording menu', 'recording options', 'the recording options', 'screen recording options', 'the screen recording options'),
+    'about': ('system information', 'my system information', 'the system information', 'omarchy information', 'the about screen', 'the system information screen', 'system details', 'my system details', 'omarchy version information'),
+}
+_NAVIGATE = ('open', 'show', 'show me', 'bring up', 'pull up', 'bring me to',
+             'take me to', 'go to', 'let me see', 'let me access', 'display',
+             'view', 'access', 'get me to')
+for _action, _targets in _DESTINATIONS.items():
+    _forms(_action, _NAVIGATE, _targets)
+
+# Chooser requests express the desired operation while keeping actual selection
+# in the desktop's own UI. No theme, device, package or font name is invented.
+for _action, _targets in {
+    'theme_picker': ('theme', 'the theme', 'my theme', 'desktop theme', 'the desktop theme', 'my desktop theme', 'omarchy theme', 'the omarchy theme'),
+    'background_picker': ('wallpaper', 'the wallpaper', 'my wallpaper', 'background', 'the background', 'my background', 'desktop background', 'the desktop background', 'my desktop background'),
+    'font_picker': ('font', 'the font', 'my font', 'desktop font', 'the desktop font', 'my desktop font', 'system font', 'the system font'),
+}.items():
+    _forms(_action, ('change', 'choose', 'pick', 'select', 'switch', 'replace',
+                     'let me change', 'let me choose', 'let me pick', 'let me select',
+                     'help me change', 'help me choose', 'i want to change',
+                     'i want to choose', 'i need to change'), _targets + ('a ' + _targets[0],))
+    for _target in ('a new ' + _targets[0], 'a different ' + _targets[0], 'another ' + _targets[0]):
+        _forms(_action, ('choose', 'pick', 'select', 'try', 'let me choose',
+                         'let me pick', 'i want to choose', 'i want to try'), (_target,))
+
+# Transport operations keep the selected player and audio source unchanged.
+_MEDIA_TARGETS = ('music', 'the music', 'my music', 'the audio', 'audio playback',
+                  'the audio playback', 'music playback', 'the music playback',
+                  'media playback', 'the media playback', 'playback', 'the playback',
+                  'the song', 'this song', 'the track', 'this track', 'the player')
+_forms('pause_music', ('pause', 'put a pause on', 'temporarily pause'), _MEDIA_TARGETS)
+_forms('play_music', ('resume', 'unpause', 'continue', 'get back to'), _MEDIA_TARGETS)
+_forms('play_pause', ('toggle',), ('playback', 'audio playback', 'music playback', 'media playback', 'the player playback'))
+for _action, _direction in (('next_track', 'next'), ('previous_track', 'previous')):
+    _forms(_action, ('play', 'go to', 'skip to', 'switch to', 'move to', 'put on', 'jump to', 'start playing'),
+           tuple(article + _direction + ' ' + noun for article in ('', 'the ') for noun in ('song', 'track', 'music track', 'audio track')))
+_add('previous_track', 'go back to the last song', 'go back to the last track', 'skip back a song', 'skip back a track')
+for _action, _verbs, _direction, _adjective in (
+    ('volume_down', ('lower', 'decrease', 'reduce', 'turn down'), 'down', 'quieter'),
+    ('volume_up', ('raise', 'increase', 'turn up'), 'up', 'louder'),
+):
+    _forms(_action, _verbs, ('volume', 'the volume', 'my volume', 'the audio volume', 'audio volume', 'speaker volume', 'the speaker volume', 'the music volume', 'music volume', 'system volume', 'the system volume', 'the sound level', 'the audio level', 'the sound', 'the audio', 'the music'))
+    for _target in ('the volume', 'the audio volume', 'the speaker volume', 'the music volume', 'the sound', 'the audio', 'the music'):
+        _add(_action, 'turn ' + _target + ' ' + _direction, 'bring ' + _target + ' ' + _direction)
+    _forms(_action, ('make',), tuple(target + ' ' + _adjective for target in ('it', 'the music', 'the audio', 'the sound', 'my speakers', 'the speakers', 'my computer')))
+for _action, _verbs in (('mute', ('mute', 'silence')), ('unmute', ('unmute',))):
+    _forms(_action, _verbs, ('audio', 'the audio', 'sound', 'the sound', 'the speakers', 'my speakers', 'the speaker audio', 'system audio', 'the system audio', 'desktop audio', 'the desktop audio', 'the audio output', 'my audio output'))
+for _action, _verbs, _direction in (
+    ('brightness_down', ('lower', 'decrease', 'reduce', 'turn down'), 'down'),
+    ('brightness_up', ('raise', 'increase', 'turn up'), 'up'),
+):
+    _forms(_action, _verbs, ('brightness', 'the brightness', 'my brightness', 'screen brightness', 'the screen brightness', 'my screen brightness', 'display brightness', 'the display brightness', 'my display brightness', 'monitor brightness', 'the monitor brightness', 'my monitor brightness', 'the brightness of my screen', 'the brightness of the screen'))
+    for _target in ('the brightness', 'my screen brightness', 'the screen brightness', 'the display brightness'):
+        _add(_action, 'turn ' + _target + ' ' + _direction)
+for _action, _verb, _adjective in (('brightness_down', 'dim', 'dimmer'), ('brightness_up', 'brighten', 'brighter')):
+    _forms(_action, (_verb,), ('the screen', 'my screen', 'the display', 'my display', 'the monitor', 'my monitor'))
+    _forms(_action, ('make',), tuple(target + ' ' + _adjective for target in ('the screen', 'my screen', 'the display', 'my display', 'the monitor', 'my monitor')))
+for _action, _direction in (('workspace_next', 'next'), ('workspace_previous', 'previous')):
+    _forms(_action, ('go to', 'switch to', 'move to', 'take me to', 'change to', 'jump to', 'focus', 'show', 'show me', 'bring me to'),
+           tuple(article + _direction + ' ' + noun for article in ('', 'the ') for noun in ('workspace', 'desktop', 'virtual desktop')))
+for _action, _verbs in (('dnd_on', ('enable', 'activate', 'turn on', 'switch on', 'start using')), ('dnd_off', ('disable', 'deactivate', 'turn off', 'switch off', 'stop using'))):
+    _forms(_action, _verbs, ('do not disturb', 'do not disturb mode', 'dnd', 'dnd mode', 'notification silence mode'))
+_forms('dnd_on', ('mute', 'silence', 'pause'), ('notifications', 'my notifications', 'the notifications', 'desktop notifications', 'the desktop notifications', 'notification alerts'))
+_forms('dnd_off', ('resume', 'unmute', 'allow'), ('notifications', 'my notifications', 'the notifications', 'desktop notifications', 'the desktop notifications', 'notification alerts'))
+_forms('power_saver', ('enable', 'activate', 'turn on', 'use', 'switch to', 'start using', 'put the computer in'), ('power saver', 'power saver mode', 'battery saver', 'battery saver mode', 'power saving mode'))
+_forms('power_balanced', ('enable', 'activate', 'use', 'switch to', 'return to', 'start using', 'put the computer in'), ('balanced mode', 'balanced power mode', 'balanced power', 'the balanced power profile'))
+_forms('background_next', ('show', 'switch to', 'go to', 'try', 'use', 'display', 'put on', 'cycle to'), ('the next wallpaper', 'the next background', 'the next desktop background'))
+_forms('bar_show', ('show', 'unhide', 'bring back', 'restore'), ('the bar', 'my bar', 'the top bar', 'my top bar', 'the status bar', 'my status bar', 'the desktop bar'))
+_forms('bar_hide', ('hide',), ('the bar', 'my bar', 'the top bar', 'my top bar', 'the status bar', 'my status bar', 'the desktop bar'))
+_forms('idle_inhibit', ('keep',), ('my computer awake', 'the computer awake', 'my desktop awake', 'the desktop awake', 'my screen awake', 'the screen awake'))
+_forms('idle_allow', ('allow', 'let'), ('my computer sleep when idle', 'the computer sleep when idle', 'my screen sleep when idle', 'the screen sleep when idle'))
+
+# Configuration intents open the matching controls so choices remain explicit.
+for _action in ('settings', 'settings_audio', 'settings_bluetooth', 'settings_network',
+                'settings_display', 'appearance', 'plugins', 'bar_settings', 'default_apps'):
+    _forms(_action, ('configure', 'adjust', 'manage', 'review', 'check', 'inspect'),
+           _DESTINATIONS[_action])
+_add('settings_audio', 'change my audio device', 'choose my audio output',
+     'choose my microphone', 'change my sound device', 'select an audio device')
+_add('settings_bluetooth', 'pair a bluetooth device', 'connect a bluetooth device',
+     'manage my bluetooth devices', 'pair my headphones')
+_add('settings_network', 'connect to wifi', 'connect to wi-fi', 'choose a wifi network',
+     'choose a wireless network', 'change my wifi network', 'manage my network connection')
+_add('settings_display', 'configure my monitors', 'configure my displays',
+     'adjust my display settings', 'adjust my monitor settings')
+_add('plugins', 'manage my plugins', 'configure my plugins', 'change my plugin settings')
+_add('default_apps', 'change my default apps', 'choose my default applications')
+
+# Fixed window/workspace actions. Numerical destinations are explicitly bounded
+# to the ten verified workspace actions; they never become shell arguments.
+_WINDOW_TARGETS = ('this window', 'the current window', 'the active window',
+                   'the focused window', 'my current window', 'this app window',
+                   'the current app window', 'the focused app window')
+_NUMBERS = ('one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten')
+_ORDINALS = ('first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth')
+for _number, (_word, _ordinal) in enumerate(zip(_NUMBERS, _ORDINALS), 1):
+    _destinations = tuple(noun + ' ' + number for noun in ('workspace', 'desktop', 'virtual desktop')
+                          for number in (str(_number), _word)) + tuple('the ' + _ordinal + ' ' + noun for noun in ('workspace', 'desktop', 'virtual desktop'))
+    _forms('workspace_' + str(_number), ('go to', 'switch to', 'jump to', 'focus', 'show', 'show me', 'take me to', 'bring me to', 'change to', 'move to'), _destinations)
+    _add('workspace_' + str(_number), 'workspace ' + str(_number), 'workspace ' + _word)
+    for _verb in ('move', 'send', 'put'):
+        for _target in _WINDOW_TARGETS:
+            for _destination in _destinations:
+                _add('window_workspace_' + str(_number), _verb + ' ' + _target + (' on ' if _verb == 'put' else ' to ') + _destination)
+for _direction, _position in (('left', 'on the left'), ('right', 'on the right'), ('up', 'above'), ('down', 'below')):
+    _forms('window_focus_' + _direction, ('focus', 'select', 'switch to', 'go to', 'activate'),
+           ('the window ' + _position, 'the app window ' + _position, 'the neighboring window ' + _position))
+    _add('window_focus_' + _direction, 'focus ' + _direction, 'move focus ' + _direction,
+         'move window focus ' + _direction, 'focus the window ' + _direction)
+    for _target in _WINDOW_TARGETS:
+        _add('window_swap_' + _direction, 'swap ' + _target + ' ' + _direction,
+             'swap ' + _target + ' with the window ' + _position,
+             'exchange ' + _target + ' with the window ' + _position)
+for _action, _direction in (('window_next', 'next'), ('window_previous', 'previous')):
+    _forms(_action, ('focus', 'select', 'switch to', 'go to', 'activate', 'cycle to'),
+           ('the ' + _direction + ' window', 'the ' + _direction + ' app window'))
+    _add(_action, _direction + ' window')
+_forms('window_close', ('close', 'quit', 'dismiss'), _WINDOW_TARGETS)
+for _action, _mode in (('window_fullscreen_toggle', 'fullscreen'), ('window_maximize_toggle', 'maximization'), ('window_float_toggle', 'floating')):
+    _add(_action, 'toggle ' + _mode, 'toggle window ' + _mode)
+    for _target in _WINDOW_TARGETS:
+        _add(_action, 'toggle ' + _mode + ' for ' + _target, 'toggle ' + _mode + ' on ' + _target,
+             'toggle ' + _target + ' ' + _mode)
+_forms('workspace_former', ('go back to', 'return to', 'switch back to', 'take me back to', 'focus'),
+       ('the last workspace', 'my last workspace', 'the last desktop', 'my last desktop', 'the workspace i was on', 'the desktop i was on', 'the previously focused workspace'))
+for _action, _direction in (('monitor_next', 'next'), ('monitor_previous', 'previous')):
+    _forms(_action, ('focus', 'switch to', 'go to', 'move focus to', 'take me to'),
+           ('the ' + _direction + ' monitor', 'the ' + _direction + ' display', 'the ' + _direction + ' screen'))
+_forms('scratchpad_toggle', ('toggle',), ('scratchpad', 'the scratchpad', 'my scratchpad', 'the scratchpad workspace'))
+for _target in _WINDOW_TARGETS:
+    _forms('window_to_scratchpad', ('move', 'send'), (_target + ' to the scratchpad', _target + ' to my scratchpad'))
+_forms('window_gaps_toggle', ('toggle',), ('gaps', 'window gaps', 'the window gaps', 'gaps between windows', 'the gaps between windows'))
+_forms('window_transparency_toggle', ('toggle',), ('transparency', 'window transparency', 'the window transparency', 'transparent windows'))
+_forms('workspace_layout_toggle', ('toggle',), ('workspace layout', 'the workspace layout', 'my workspace layout', 'the window layout', 'window layout'))
+
+# Explicit state controls have separate IDs. Toggle-only controls never borrow
+# enable/disable phrasing that could silently reverse the requested state.
+for _action, _verbs, _targets in (
+    ('nightlight_on', ('enable', 'activate', 'turn on', 'switch on', 'start using'), ('night light', 'nightlight', 'the night light', 'night light mode', 'the night light filter')),
+    ('nightlight_off', ('disable', 'deactivate', 'turn off', 'switch off', 'stop using'), ('night light', 'nightlight', 'the night light', 'night light mode', 'the night light filter')),
+    ('bluetooth_on', ('enable', 'activate', 'turn on', 'switch on'), ('bluetooth', 'my bluetooth', 'the bluetooth radio', 'bluetooth connectivity')),
+    ('bluetooth_off', ('disable', 'deactivate', 'turn off', 'switch off'), ('bluetooth', 'my bluetooth', 'the bluetooth radio', 'bluetooth connectivity')),
+    ('mic_mute', ('mute', 'silence', 'turn off', 'switch off'), ('mic', 'the mic', 'my mic', 'microphone', 'the microphone', 'my microphone', 'microphone input', 'the microphone input', 'my microphone input', 'audio input', 'my audio input')),
+    ('mic_unmute', ('unmute', 'turn on', 'switch on'), ('mic', 'the mic', 'my mic', 'microphone', 'the microphone', 'my microphone', 'microphone input', 'the microphone input', 'my microphone input', 'audio input', 'my audio input')),
+    ('keyboard_brightness_up', ('raise', 'increase', 'turn up'), ('keyboard brightness', 'the keyboard brightness', 'my keyboard brightness', 'keyboard backlight brightness', 'the keyboard backlight brightness')),
+    ('keyboard_brightness_down', ('lower', 'decrease', 'reduce', 'turn down'), ('keyboard brightness', 'the keyboard brightness', 'my keyboard brightness', 'keyboard backlight brightness', 'the keyboard backlight brightness')),
+    ('keyboard_brightness_off', ('turn off', 'disable', 'switch off'), ('keyboard backlight', 'the keyboard backlight', 'my keyboard backlight', 'keyboard lighting', 'the keyboard lighting')),
+    ('keyboard_brightness_restore', ('restore', 'turn on', 'enable', 'switch on'), ('keyboard backlight', 'the keyboard backlight', 'my keyboard backlight', 'keyboard lighting', 'the keyboard lighting')),
+):
+    _forms(_action, _verbs, _targets)
+_add('mic_mute', 'mic off', 'microphone off', 'mute myself')
+_add('mic_unmute', 'mic on', 'microphone on', 'unmute myself')
+_add('keyboard_brightness_up', 'brighten the keyboard', 'make the keyboard brighter', 'keyboard brightness up')
+_add('keyboard_brightness_down', 'dim the keyboard', 'make the keyboard dimmer', 'keyboard brightness down')
+_forms('audio_output_next', ('switch to', 'cycle to', 'use', 'select'), ('the next audio output', 'the next sound output', 'the next output device', 'the next audio device'))
+_add('audio_output_next', 'cycle audio outputs', 'cycle sound outputs', 'cycle output devices', 'next audio output')
+_forms('screenshot', ('take', 'grab', 'capture', 'save'), ('a screenshot', 'a screen shot', 'a screen capture'))
+_add('screenshot', 'take screenshot', 'take a screenshot of my screen', 'screenshot my screen')
+_forms('capture_text', ('capture', 'extract', 'copy', 'recognize'), ('text from the screen', 'text from my screen', 'the text on the screen', 'the text on my screen', 'text from a screen region'))
+_add('capture_text', 'screen ocr', 'ocr my screen', 'extract screen text')
+_forms('capture_qr', ('scan', 'read', 'capture', 'decode'), ('a qr code', 'the qr code', 'a qr code on my screen', 'the qr code on the screen', 'the onscreen qr code'))
+_forms('recording_stop', ('stop', 'finish', 'end'), ('screen recording', 'the screen recording', 'my screen recording', 'recording my screen', 'recording the screen'))
+for _action, _app in (('default_browser', 'browser'), ('default_terminal', 'terminal'), ('default_editor', 'editor')):
+    _forms(_action, ('change', 'choose', 'pick', 'select', 'set', 'let me change', 'let me choose'),
+           ('default ' + _app, 'the default ' + _app, 'my default ' + _app, 'a default ' + _app))
+    _forms(_action, _NAVIGATE, ('default ' + _app + ' settings', 'the default ' + _app + ' settings', 'default ' + _app + ' options'))
+
 _GERUNDS = {
     'open': 'opening', 'launch': 'launching', 'show': 'showing', 'bring': 'bringing',
     'pull': 'pulling', 'start': 'starting', 'check': 'checking', 'view': 'viewing',
@@ -151,25 +347,50 @@ def normalize(message):
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'[.!?]+$', '', text).strip()
     text = re.sub(r'^(?:(?:hey|hi|okay|ok)\s+)?wisp\s*,?\s+', '', text)
-    prefix = (r"^(?:please|can you|could you|would you|will you|can we|could we|"
-              r"i want you to|i need you to|i would like you to|"
-              r"i was wondering if you could|let's|lets|let us|i'd like to|"
-              r"i would like to|go ahead and)(?:,?\s+)")
-    suffix = r"(?:,?\s+please|\s+now|\s+for me)$"
+    return _strip_request(text)
+
+
+_REQUEST_PREFIX = re.compile(
+    r"^(?:please|can you|could you|would you|will you|can we|could we|"
+    r"i want you to|i need you to|i would like you to|"
+    r"i was wondering if you could|let's|lets|let us|i'd like to|"
+    r"i would like to|go ahead and)(?:,?\s+)")
+_REQUEST_SUFFIX = re.compile(r"(?:,?\s+please|\s+now|\s+for me)$")
+_AUTHORED_PHRASE = re.compile(r"[a-z0-9]+(?:[ '-][a-z0-9]+)*")
+
+
+def _strip_request(text):
     for _ in range(8):
-        stripped = re.sub(prefix, '', text)
-        stripped = re.sub(suffix, '', stripped).strip()
+        stripped = (_REQUEST_PREFIX.sub('', text)
+                    if text.startswith(('please', 'can ', 'could ', 'would ', 'will ',
+                                        'i ', "i'd ", "let's", 'lets', 'let ', 'go '))
+                    else text)
+        if stripped.endswith((' please', ' now', ' for me')):
+            stripped = _REQUEST_SUFFIX.sub('', stripped).strip()
         if stripped == text:
             break
         text = stripped
     return text
 
 
+def _authored_key(phrase):
+    """Compile trusted, canonical source phrases without input sanitization.
+
+    Incoming requests always use normalize(). The narrow source grammar rejects
+    new noncanonical phrases, and tests exhaustively compare these keys with the
+    public normalizer. This avoids 20,000 redundant Unicode/punctuation passes
+    each time a short-lived desktop helper starts.
+    """
+    if len(phrase) > 240 or not _AUTHORED_PHRASE.fullmatch(phrase):
+        raise ValueError('Noncanonical smart command phrase: ' + phrase)
+    return _strip_request(phrase)
+
+
 PHRASES = {action: tuple(sorted(phrases)) for action, phrases in _bank.items()}
 LOOKUP = {}
 for _action, _phrases in PHRASES.items():
     for _phrase in _phrases:
-        _key = normalize(_phrase)
+        _key = _authored_key(_phrase)
         if not _key or (_key in LOOKUP and LOOKUP[_key] != _action):
             raise ValueError('Ambiguous or invalid smart command phrase: ' + _phrase)
         LOOKUP[_key] = _action

@@ -37,9 +37,15 @@ LABELS = {
  'dnd_on':'Quiet notifications', 'dnd_off':'Resume notifications',
  'reminders':'Open timers and reminders',
 }
-def catalogue():
- return [{'id':key,'label':LABELS[key],'available':bool(shutil.which(argv[0])),
-          'requires':argv[0]} for key,argv in ACTIONS.items()]
+def catalogue(state_dir=None, include_personal=False):
+ from smart_commands import PHRASES
+ from command_catalog import decorate, personal_entries
+ entries=decorate([{'id':key,'label':LABELS[key],'available':bool(shutil.which(argv[0])),
+          'requires':argv[0]} for key,argv in ACTIONS.items()], PHRASES)
+ if include_personal:
+  from parameter_commands import catalogue as percentages
+  entries += percentages() + personal_entries(state_dir)
+ return entries
 
 MEDIA_ACTIONS = {'pause_music','play_music','play_pause','next_track'}
 

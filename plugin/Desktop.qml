@@ -88,6 +88,8 @@ Item {
     property string displayMood:listener.busy?"reading":actor.busy?"working":brain.busy||choice.busy||selfName.busy?"thinking":speaker.busy?"playing":inputMood|| (mood!=="idle"?mood:senseAllowed && motionClock-(awareness.sampled||0)*1000<90000?({Maker:"working",Artist:"playing",Musician:"playing",Archivist:"reading"})[awareness.snapshot.category]||"idle":"idle")
     property string reply: "Hey, I’m Wisp. A little signal in your machine.\n\nAsk me something, or try ‘turn the volume down’."
     property string pending: ""
+    property string pendingLabel: ""
+    property string responseSource: ""
     property var growth: ({stage:"Spark",level:0,trait:"Maker",xp:0,next:24,traits:{},journal:[]})
     property bool journalOpen: false
     property string growthError: ""
@@ -114,7 +116,7 @@ Item {
     function toggle() { showPanel(opened?"":"chat");persist() }
     function send() {
         if (busy || !field.text.trim()) return
-        journalOpen=false; pending=""; mood="thinking"; reply="Following that thought…"
+        journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
         brain.run(["chat",field.text,eco?"eco":"normal"]); field.text=""
     }
     IpcHandler {
@@ -182,12 +184,12 @@ Item {
     AwarenessPanel {
         id:senses
         visible:root.awarenessOpen && root.stateReady && !root.dreaming
-        state:root.awareness;tools:root.tools;busy:awarenessConfig.busy;pluggedIn:!root.eco;detail:root.awarenessDetail
+        state:root.awareness;tools:root.tools;busy:root.busy||awarenessConfig.busy||toolCall.busy;pluggedIn:!root.eco;detail:root.awarenessDetail
         inputSummary:inputs.summary
         onCloseRequested:root.showPanel("")
         onPreviewBubble:root.previewBubble()
         onChange:function(setting,value){reflection.cancel();root.asideVisible=false;awarenessConfig.run(["awareness",setting,value])}
-        onPropose:function(action,label){root.showPanel("chat");root.journalOpen=false;root.pending=action;root.reply="Ready: "+label+". Tap Run below."}
+        onPropose:function(action,label){root.showPanel("chat");root.journalOpen=false;root.pending=action;root.pendingLabel=label;root.responseSource="local";root.reply="Ready: "+label+". Tap Run below."}
     }
 
     Call {id:reminderList;onReceived:function(d){if(d.error)root.reminderDetail=d.error;else root.reminders=d.reminders||[];}}
@@ -219,8 +221,8 @@ Item {
     }
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
-    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
-    Call { id: actor; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending="";reaction.restart() } }
+    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
+    Call { id: actor; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(!d.error){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
     Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.reply="Transcribing your recording locally…" } }
     Call { id: listener; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
     Call { id: speaker; onReceived: function(d) { if(d.error) root.reply="Voice: "+d.error } }
@@ -309,22 +311,23 @@ Item {
                 id:chatContent;x:16;y:16;width:parent.width-32;spacing:10
                 Row {
                     width:parent.width;spacing:8
-                    Column {width:parent.width-64;spacing:4
+                    Column {width:parent.width-closeChat.width-parent.spacing;spacing:4
                         Text {width:parent.width;text:root.profile.name;elide:Text.ElideRight;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.title}
                         Text {text:root.stateReady?root.growth.stage+" · "+root.growth.xp+" XP":"Restoring…";color:Color.foreground;opacity:0.5;font.family:Style.font.family;font.pixelSize:Style.font.caption}
                     }
-                    Action {text:"Close";onClicked:root.showPanel("")}
+                    Action {id:closeChat;text:"Close";onClicked:root.showPanel("")}
                 }
-                Row {spacing:6
+                Flow {width:parent.width;spacing:6
                     Action {text:"Chat";selected:!root.journalOpen;onClicked:{root.journalOpen=false;root.moreOpen=false}}
                     Action {text:"Room";enabled:root.stateReady;onClicked:root.showPanel("room")}
                     Action {text:"Self";enabled:root.stateReady;onClicked:root.showPanel("self")}
+                    Action {text:"Commands";onClicked:root.showPanel("tools")}
                     Action {text:"More";selected:root.moreOpen;onClicked:root.moreOpen=!root.moreOpen}
                 }
                 Flow {
                     visible:root.moreOpen;width:parent.width;spacing:4
                     Action {text:"Thoughts";onClicked:root.showPanel("thoughts")}
-                    Action {text:"Tools";onClicked:root.showPanel("tools")}
+                    Action {text:"Commands";onClicked:root.showPanel("tools")}
                     Action {text:"Settings";onClicked:root.showPanel("settings")}
                     Action {text:"Timers / Reminders";onClicked:root.showPanel("reminders")}
                     Action {text:"Growth";onClicked:{root.journalOpen=true;root.moreOpen=false;growthCall.run(["growth"])}}
@@ -337,9 +340,16 @@ Item {
                     boundsBehavior:Flickable.StopAtBounds;Controls.ScrollBar.vertical:Controls.ScrollBar {}
                     Text {id:answer;width:parent.width-8;text:!root.stateReady?(root.restoreError||"Restoring your saved companion…"):root.journalOpen?(root.growthError||Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")):root.reply;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
                 }
-                Action {visible:!!root.pending;text:"Run · "+root.pending.replace(/_/g," ");enabled:!root.busy;onClicked:{root.mood="working";actor.run(["action",root.pending])}}
+                Column {
+                    visible:!!root.pending;width:parent.width;spacing:6
+                    Text {width:parent.width;text:root.pendingLabel;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                    Row {spacing:6
+                        Action {text:actor.busy?"Running…":"Run";enabled:!root.busy;onClicked:{root.mood="working";actor.run(["action",root.pending])}}
+                        Action {text:"Cancel";enabled:!root.busy;onClicked:{root.pending="";root.pendingLabel="";root.reply="Cancelled. Nothing was run."}}
+                    }
+                }
                 Controls.TextField {
-                    id:field;width:parent.width;height:36;placeholderText:root.busy?"One moment…":"Talk to your companion…";enabled:!root.busy
+                    id:field;width:parent.width;height:36;placeholderText:root.busy?"One moment…":"Try “change my theme”…";enabled:!root.busy
                     color:Color.foreground;placeholderTextColor:Qt.alpha(Color.foreground,0.5);font.family:Style.font.family;selectByMouse:true
                     background:Ui.BorderSurface {radius:Style.cornerRadius;color:Qt.alpha(Color.accent,0.05);borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)}
                     onAccepted:root.send();Keys.onEscapePressed:root.showPanel("")
@@ -347,7 +357,7 @@ Item {
                 Row {spacing:6
                     Action {text:"Send";enabled:!root.busy;onClicked:root.send()}
                     Action {text:listener.busy?(root.micSeconds>0?"Mic · "+root.micSeconds+"s":"Decoding…"):"Mic";tooltipText:"Record seven seconds of speech";enabled:!root.busy;onClicked:{root.micSeconds=7;root.mood="reading";root.reply="Listening now · speak for up to 7 seconds…";listener.run(["listen"])}}
-                    Text {text:root.eco?"Battery care":"Local AI";color:Color.foreground;opacity:0.45;font.family:Style.font.family;font.pixelSize:Style.font.caption;anchors.verticalCenter:parent.verticalCenter}
+                    Text {text:root.busy?"On device":root.responseSource==="local"?"No AI needed":root.responseSource==="model"?"Local AI":root.eco?"Battery care":"On device";color:Color.foreground;opacity:0.45;font.family:Style.font.family;font.pixelSize:Style.font.caption;anchors.verticalCenter:parent.verticalCenter}
                 }
             }
         }

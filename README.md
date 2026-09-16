@@ -30,13 +30,28 @@ A settled moment can prompt one short aside from the selected local model, at mo
 
 Ambient observation/generation pauses on battery, power saver, idle, lock, fullscreen, Do Not Disturb, quiet pause, hidden Wisp, or heavy CPU load. Unknown desktop/lock signals keep it quiet. Foreground chat cancels the ambient client; model calls share a lock, and background requests use two threads, a 30-second HTTP timeout and no model keep-alive. Results are discarded if power, consent or the foreground window changes. The shell suppresses asides during direct interaction with Wisp. Use **Pause 1h**, **Awareness off**, or **Privacy and data → Forget activity and thoughts** whenever wanted. Forgetting clears the diary, reflections and activity aggregates (including backups), preserving earned identity/XP and daily reward limits.
 
-**More → Tools** exposes the actual fixed action catalogue and missing executables. Common supported requests route directly without relying on model judgment, while more varied language uses the catalogue in the model prompt. Tools still require Run and report their actual result; the model cannot execute arbitrary commands. Workspace navigation uses the current Omarchy/Hyprland Lua dispatch API. Media controls use Omarchy’s native media service and report unhandled actions; no playerctl dependency is needed. Obsidian and Do Not Disturb are included when available.
+**Commands** exposes the actual fixed action catalogue and missing executables. Common supported requests route directly without relying on model judgment, while more varied language uses the catalogue in the model prompt. Tools still require Run and report their actual result; the model cannot execute arbitrary commands. Workspace navigation uses the current Omarchy/Hyprland Lua dispatch API. Media controls use Omarchy’s native media service and report unhandled actions; no playerctl dependency is needed. Obsidian and Do Not Disturb are included when available.
+
+## Command center (1.4)
+
+Open **Commands** directly from chat. Search by task or example, filter categories, and inspect what is available on your machine. Each card explains the action and gives a phrase to try. Themes and supported plugins from your personal bank appear alongside built-in controls. **Ctrl+F** focuses search; **↑/↓** browses results; **Enter** prepares the selected command. Preparation never executes it: review its readable name in chat, then **Run** or **Cancel**. Failed actions remain available to retry. The availability filter checks required executables, not attached hardware or guaranteed success.
+
+New controls include window focus/swap/fullscreen/floating, workspaces 1–10 and moving windows between them, scratchpad, monitor focus, microphone mute, keyboard lighting, explicit night-light and Bluetooth states, screenshots/OCR/QR selection, and default-app menus. Window operations affect the window focused when Run is pressed; closing may prompt its app to save work. Native menu choices and asynchronous service requests report acceptance rather than claiming the requested downstream work is already complete.
+
+Exact percentages are parsed separately, without AI or adding hundreds of numeric copies to the phrase count:
+
+- **“Set volume to 35 percent”** — default audio output, 0–100%.
+- **“Set brightness to 60%”** — focused display, 1–100%.
+- **“Move this window to workspace five”** — a fixed, bounded workspace action.
+- **“Turn off my microphone”**, **“turn on night light”**, **“show clipboard history.”**
+
+Chat distinguishes **No AI needed** from **Local AI** replies. If local conversation is unavailable, Wisp offers supported command examples and points to Commands. The growing bank covers explicit supported desktop tasks; it is not arbitrary shell execution or universal control of every application's internal UI. Publishing, deleting files, resetting configuration, and installing packages are not inferred from broad requests. Installation/update/power menus let the user choose their native next step.
 
 ## Everyday commands and your personal bank (1.3)
 
 Common requests use a deterministic phrase bank before Ollama. No model is needed for **“change my theme,” “change wallpaper,” “open audio settings,” “show keyboard shortcuts,” “clipboard history,” “keep my computer awake,”** or **“show the bar.”** Public Wisp keeps the existing **Run** review step. A theme request without a name opens the native chooser; **“change my theme to Tokyo Night”** offers that exact installed theme. Background, font, app, plugin, default-app, learning, capture, recording, install, update and power menus are included. Opening a menu does not choose its options for you.
 
-The built-in bank contains 2,101 whole-utterance phrases for 52 actions. Polite wrappers are supported; quoted, negated, conditional, delayed and compound prose does not match a built-in command. **“Toggle night light”** intentionally means toggle; on/off wording is not silently converted to a toggle. Unsupported wording still uses normal chat. Say **“list commands”** for the fixed catalogue.
+The built-in bank contains 21,964 unique normalized whole-utterance phrases for 112 actions (10,448 core forms before generated gerund requests). Polite wrappers are supported; quoted, negated, conditional, delayed and compound prose does not match a built-in command. **“Turn on night light”** and **“turn off night light”** request explicit states; **“toggle night light”** remains a separate operation. Unsupported wording still uses normal chat. Say **“list commands”** for the fixed catalogue.
 
 A built-in metadata scanner runs during development installation and on first enable/restore for normal `omarchy plugin add` installations. It discovers installed theme directories and plugin manifests from Omarchy’s system and user directories. It does not import plugin code, execute manifest commands, inspect conversations, call a model, install anything, or send inventory over the network. Matching refreshes this bounded inventory, so later additions and removals are picked up too. Supported enabled `panel`, `overlay` and `menu` plugins gain exact **“open <name>”** phrases; bar-only/service plugins remain visible in the inventory because their click behavior is not guaranteed to open a panel. The desktop must accept a panel request before Wisp reports it accepted.
 
@@ -80,7 +95,7 @@ Omarchy's existing systemd user timers deliver the desktop notification independ
 
 ## A quieter companion UI
 
-Chat keeps its main controls in one place: **Chat / Room / Self / More**. More holds Thoughts, Tools, Settings, Growth, voice and clear/hide actions. Opening a panel closes the previous one. Thoughts shows recent comments first; activity logs and settings details expand only when needed. Self groups naming, influences, lineage previews and local-model controls into expandable sections. The room puts its artwork and activities first, with notes and room details tucked below. Controls use the native Omarchy button and border styles.
+Chat keeps its main controls in one place: **Chat / Room / Self / More**. Commands is directly accessible beside Chat, Room and Self. More holds Thoughts, Settings, Growth, voice and clear/hide actions. Opening a panel closes the previous one. Thoughts shows recent comments first; activity logs and settings details expand only when needed. Self groups naming, influences, lineage previews and local-model controls into expandable sections. The room puts its artwork and activities first, with notes and room details tucked below. Controls use the native Omarchy button and border styles.
 
 ## Request privacy
 

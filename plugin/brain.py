@@ -7,6 +7,7 @@ MODEL = os.environ.get('PIXEL_SPIRIT_MODEL', 'qwen3.5:4b')
 from capabilities import ACTIONS, LABELS, MEDIA_ACTIONS, catalogue
 from smart_commands import match as smart_match, normalize
 import command_routes
+import parameter_commands
 
 EMOTES = ['idle','thinking','working','playing','reading','happy','sleeping']
 def run(args, timeout=8):
@@ -19,14 +20,16 @@ def save(name, data):
  put(BASE/name, data, preserve_previous=bool(data))
 
 def execute(action):
+ if isinstance(action,str) and action.startswith('param:'):return parameter_commands.execute(action)
  if isinstance(action,str) and action.startswith('bank:'):return command_routes.execute(action,BASE)
  if action not in ACTIONS: raise ValueError('Unsupported desktop action')
  if not shutil.which(ACTIONS[action][0]):raise ValueError('This tool needs '+ACTIONS[action][0]+'. It is not installed.')
  result=run(ACTIONS[action])
- from desktop_commands import IPC_ACTIONS
- if action in IPC_ACTIONS and result.strip()!='ok':raise ValueError('The desktop did not accept that request. Check that its plugin is enabled.')
+ from desktop_commands import IPC_ACTIONS, RECEIPTS, ASYNC_ACTIONS
+ accepted=RECEIPTS.get(action, frozenset({'ok'}) if action in IPC_ACTIONS else None)
+ if accepted is not None and result.strip() not in accepted:raise ValueError('The desktop did not accept that request. Check that its plugin is enabled.')
  if action in MEDIA_ACTIONS and result.strip()!='ok':raise ValueError('No media player could handle that action. Open a controllable music or video player first.')
- return {'text': 'Done · '+action.replace('_',' '), 'emote':'working','action':''}
+ return {'text': ('Request accepted · ' if action in ASYNC_ACTIONS else 'Done · ')+LABELS[action], 'emote':'working','action':'','route':'local'}
 def context():
  result = {}
  for key, cmd in [('power',['powerprofilesctl','get']),('volume',['wpctl','get-volume','@DEFAULT_AUDIO_SINK@'])]:
@@ -38,6 +41,8 @@ def direct_action(message):
 def chat(message, eco=False):
  message = message.strip()[:4000]
  if not message: raise ValueError('Say something first.')
+ local_reply=parameter_commands.proposal(message)
+ if local_reply:return local_reply
  local_reply=command_routes.maintenance(message,BASE,normalize)
  if local_reply:return local_reply
  if not direct_action(message):
@@ -46,15 +51,15 @@ def chat(message, eco=False):
  from reminders import parse_request
  draft=parse_request(message)
  if draft:
-  return {'text':'Ready to set your reminder. Check the details and tap Set reminder.', 'emote':'working','action':'','reminderDraft':draft}
+  return {'text':'Ready to set your reminder. Check the details and tap Set reminder.', 'emote':'working','action':'','reminderDraft':draft,'route':'local'}
  history = read('history.json', [])[-8:]
  if message.lower().rstrip('.?!') in ['what can you do','what tools do you have','list tools','show tools','help','list commands','show commands','command library']:
   text='I can propose these tools; choose one and tap Run:\n'+ '\n'.join(t['label']+('' if t['available'] else ' (needs '+t['requires']+')') for t in catalogue())
-  return {'text':text,'emote':'reading','action':''}
+  return {'text':text,'emote':'reading','action':'','route':'local'}
  action = direct_action(message)
  if action:
   if not shutil.which(ACTIONS[action][0]):return {'text':'That tool needs '+ACTIONS[action][0]+'. It is not installed.','emote':'idle','action':''}
-  data = {'text':'Ready: '+LABELS[action]+'. Tap Run below.', 'emote':'playing' if action in ['play_pause','next_track'] else 'working','action':action}
+  data = {'text':'Ready: '+LABELS[action]+'. Tap Run below.', 'emote':'playing' if action in ['play_pause','next_track'] else 'working','action':action,'actionLabel':LABELS[action],'route':'local'}
   save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(data)}])[-8:])
   return data
  from growth import memory_context
@@ -81,13 +86,18 @@ def chat(message, eco=False):
   'options':{'num_ctx':4096,'num_predict':350,'num_thread':2 if eco else 4,'temperature':0.5},
   'messages':[{'role':'system','content':system}]+[{'role':h['role'],'content':h['content'][:800]} for h in history[-4:]]+[{'role':'user','content':message}]}
  from inference import request
- answer=request(payload,state_dir=BASE)
+ try:
+  answer=request(payload,state_dir=BASE)
+ except (OSError,TimeoutError):
+  from command_catalog import offline_reply
+  return offline_reply(message,catalogue())
  data = json.loads(answer['message']['content'])
+ data['route']='model'
  if not isinstance(data.get('text'),str) or data.get('emote') not in EMOTES or data.get('action','') not in ['']+list(ACTIONS): raise ValueError('Invalid model response; please try again.')
  if data.get('action'):
   action=data['action']
   if shutil.which(ACTIONS[action][0]):
-   data.update(text='Ready: '+LABELS[action]+'. Tap Run below.',emote='working')
+   data.update(text='Ready: '+LABELS[action]+'. Tap Run below.',emote='working',actionLabel=LABELS[action])
   else:
    data.update(text='That tool needs '+ACTIONS[action][0]+'. It is not installed.',action='',emote='idle')
  save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(data)}])[-8:])
@@ -160,7 +170,7 @@ def main():
   if command=='reminders':return reminders.upcoming()
   if command=='remind':return reminders.create(args[1],args[2])
   return reminders.cancel(args[1])
- if command=='tools':return {'tools':catalogue()}
+ if command=='tools':return {'tools':catalogue(BASE,include_personal=True)}
  if command=='input_gate':
   from awareness import input_gate
   return input_gate()
