@@ -211,7 +211,7 @@ Item {
     function prepareCommandChoice(choice) {
         if(busy || !choice)return
         var action=choice.action,label=choice.label
-        commandChoices=[];clearPlanProgress();journalOpen=false;pending=action;pendingLabel=label
+        commandChoices=[];clearPlanProgress();showPanel("chat");journalOpen=false;pending=action;pendingLabel=label
         responseSource="local";reply="Ready: "+label+". Tap Run below."
     }
     property string responseSource: ""
@@ -247,8 +247,7 @@ Item {
     function reviewBubbleAction() {
         var action=asideAction,label=asideActionLabel
         if(!action)return
-        showPanel("chat");journalOpen=false;pending=action;pendingLabel=label
-        responseSource="local";reply="Ready: "+label+". Tap Run below."
+        prepareCommandChoice({action:action,label:label})
     }
     function previewBubble() {
         showPanel("");asidePreview=true;asideBasis="Preview";asideId=""
@@ -257,6 +256,10 @@ Item {
         asideVisible=true;asideDismiss.restart()
     }
     function toggle() { showPanel(opened?"":"chat");persist() }
+    function voiceReply(text) {
+        // Recording and transcription are temporary status, not a new request.
+        var choices=commandChoices.slice();reply=text;commandChoices=choices
+    }
     function send() {
         if (busy || !field.text.trim()) return
         if(handleCommandChoiceReply(field.text)){field.text="";return}
@@ -318,7 +321,7 @@ Item {
     Call {id:setupCall;onReceived:function(d){
         if(d.error){root.setupError=d.error;root.setupFinishing=false;return}
         root.setupData=d;root.setupError=""
-        if(root.setupFinishing){root.setupFinishing=false;if(d.completed===true)root.showPanel("");else root.setupError=d.text||"Setup did not finish. Try again."}
+        if(root.setupFinishing){root.setupFinishing=false;if(d.completed===true){if(root.setupOpen)root.showPanel("")}else root.setupError=d.text||"Setup did not finish. Try again."}
     }}
     SetupPanel {
         id:introduction
@@ -385,7 +388,7 @@ Item {
         onCloseRequested:root.showPanel("")
         onPreviewBubble:root.previewBubble()
         onChange:function(setting,value){reflection.cancel();root.asideVisible=false;awarenessConfig.run(["awareness",setting,value])}
-        onPropose:function(action,label){root.showPanel("chat");root.journalOpen=false;root.pending=action;root.pendingLabel=label;root.responseSource="local";root.reply="Ready: "+label+". Tap Run below."}
+        onPropose:function(action,label){root.prepareCommandChoice({action:action,label:label})}
     }
 
     Call {id:reminderList;onReceived:function(d){if(d.error)root.reminderDetail=d.error;else root.reminders=d.reminders||[];}}
@@ -420,9 +423,9 @@ Item {
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
     Call { id: brain; onReceived: function(d) { root.clearPlanProgress();root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.planSteps=!d.error?root.previewPlanSteps(root.pending,d.steps):[];root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
-    Call { id: actor; onReceived: function(d) { var receiptMood=root.actionReceiptMood(d,!!root.activePlanToken);if(root.activePlanToken){root.planFinished=true;root.planProgress=Object.assign({},root.planProgress,{status:["cancelled","interrupted"].indexOf(d.status)>=0?d.status:(d.error||d.ok===false?"failed":"completed"),text:d.error||d.text});root.planFinalReadNeeded=true;root.readPlanProgress()}root.reply=d.error||d.text; root.mood=receiptMood; if(!d.error){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
-    Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.reply="Transcribing your recording locally…" } }
-    Call { id: listener; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
+    Call { id: actor; onReceived: function(d) { var receiptMood=root.actionReceiptMood(d,!!root.activePlanToken);if(root.activePlanToken){root.planFinished=true;root.planProgress=Object.assign({},root.planProgress,{status:["cancelled","interrupted"].indexOf(d.status)>=0?d.status:(d.error||d.ok===false?"failed":"completed"),text:d.error||d.text});root.planFinalReadNeeded=true;root.readPlanProgress()}root.reply=d.error||d.text; root.mood=receiptMood; if(!d.error || root.activePlanToken){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
+    Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.voiceReply("Transcribing your recording locally…") } }
+    Call { id: listener; onReceived: function(d) { root.voiceReply(d.error||d.text); root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
     Call { id: speaker; onReceived: function(d) { if(d.error) root.reply="Voice: "+d.error } }
     PanelWindow {
         id: win
@@ -527,7 +530,6 @@ Item {
                 Flow {
                     visible:root.moreOpen;width:parent.width;spacing:4
                     Action {text:"Thoughts";onClicked:root.showPanel("thoughts")}
-                    Action {text:"Commands";onClicked:root.showPanel("tools")}
                     Action {text:"Settings";onClicked:root.showPanel("settings")}
                     Action {text:"Getting started";onClicked:root.showPanel("setup")}
                     Action {text:"Timers / Reminders";onClicked:root.showPanel("reminders")}
@@ -626,7 +628,7 @@ Item {
                 }
                 Row {spacing:6
                     Action {text:"Send";enabled:!root.busy;onClicked:root.send()}
-                    Action {text:listener.busy?(root.micSeconds>0?"Mic · "+root.micSeconds+"s":"Decoding…"):"Mic";tooltipText:"Record seven seconds of speech";enabled:!root.busy;onClicked:{root.micSeconds=7;root.mood="reading";root.reply="Listening now · speak for up to 7 seconds…";listener.run(["listen"])}}
+                    Action {text:listener.busy?(root.micSeconds>0?"Mic · "+root.micSeconds+"s":"Decoding…"):"Mic";tooltipText:"Record seven seconds of speech";enabled:!root.busy;onClicked:{root.micSeconds=7;root.mood="reading";root.voiceReply("Listening now · speak for up to 7 seconds…");listener.run(["listen"])}}
                     Text {text:root.busy?"On device":root.responseSource==="local"?"No AI needed":root.responseSource==="model"?"Local AI":root.eco?"Battery care":"On device";color:Color.foreground;opacity:0.45;font.family:Style.font.family;font.pixelSize:Style.font.caption;anchors.verticalCenter:parent.verticalCenter}
                 }
             }

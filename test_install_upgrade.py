@@ -18,7 +18,7 @@ class InstallUpgrade(unittest.TestCase):
    for name in ['capability_registry.py','capability_specs.py','plan_edits.py','plan_extensions.py','plan_runtime.py','SetupPanel.qml','onboarding.py']:
     self.assertEqual((target/name).read_bytes(),(ROOT/'plugin'/name).read_bytes())
    manifest=json.loads((target/'manifest.json').read_text())
-   self.assertEqual(manifest['version'],'2.0.0');self.assertEqual(manifest['entryPoints']['service'],'Desktop.qml')
+   self.assertEqual(manifest['version'],json.loads((ROOT/'manifest.json').read_text())['version']);self.assertEqual(manifest['entryPoints']['service'],'Desktop.qml')
    shell=json.loads((config/'shell.json').read_text());self.assertTrue(shell['userFlag'])
    self.assertEqual([p['id'] for p in shell['plugins']],['example.clock','oxquan.pixel-spirit'])
    self.assertEqual([p['id'] for p in shell['bar']['layout']['left']],['example.clock','oxquan.pixel-spirit'])

@@ -9,8 +9,9 @@ def action_id(entry):
     return 'bank:' + entry['kind'] + ':' + entry['target']
 
 
-def proposal(message, state_dir):
-    entry = command_bank.match(message, state_dir=state_dir)
+def proposal(message, state_dir, bank=None):
+    entry = (command_bank.match(message, state_dir=state_dir) if bank is None
+             else bank['aliases'].get(command_bank.normalize(message)))
     if entry is None:
         return None
     return {'text': 'Ready: ' + entry['label'] + '. Tap Run below.',

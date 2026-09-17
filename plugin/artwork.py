@@ -1,6 +1,26 @@
 """Original portraits rendered from the same pixel silhouettes as the QML companion."""
-import json, math, re
+import json, math, os, re, stat, tomllib
 from pathlib import Path
+
+DEFAULT_PALETTE={'accent':'#86efac','foreground':'#dcece6','background':'#101817'}
+
+def theme_palette():
+ # Omarchy itself uses ~/.config, regardless of XDG_CONFIG_HOME.
+ colors=DEFAULT_PALETTE.copy()
+ try:
+  path=Path.home()/'.config/omarchy/current/theme/colors.toml'
+  descriptor=os.open(path,os.O_RDONLY|os.O_NONBLOCK|os.O_CLOEXEC)
+  with os.fdopen(descriptor,'rb') as source:
+   metadata=os.fstat(source.fileno())
+   if not stat.S_ISREG(metadata.st_mode) or metadata.st_size>65536:return colors
+   raw=source.read(65537)
+  if len(raw)>65536:return colors
+  values=tomllib.loads(raw.decode('utf-8'))
+ except (OSError,ValueError,UnicodeError):return colors
+ for key in colors:
+  value=values.get(key)
+  if isinstance(value,str) and re.fullmatch(r'#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?',value):colors[key]=value
+ return colors
 
 def forms():
  text=(Path(__file__).parent/'Forms.js').read_text().split('var families = ',1)[1].split('\nfunction rows',1)[0]
@@ -20,7 +40,7 @@ def portrait(family='Musician',level=2,seed=0,accent='#82fb9c',foreground='#ddf7
  return ''.join(pixels)
 def export(profile,growth,palette):
  from identity import appearance
- from growth import STATE,put
+ from growth import STATE
  palette={k:(v if re.fullmatch(r'#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?',str(v)) else '#101817') for k,v in palette.items()}
  look=appearance(profile,growth.get('traits',{}))
  svg=f'<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="{palette["background"]}"/>'+portrait(look['family'],growth.get('level',0),profile['seed'],palette['accent'],palette['foreground'],palette['background'])+'</svg>'

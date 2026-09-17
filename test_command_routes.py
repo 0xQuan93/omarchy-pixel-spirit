@@ -123,6 +123,50 @@ class CommandRouteTests(unittest.TestCase):
             self.assertTrue((self.state / command_bank.GENERATED).exists())
             inference.assert_not_called()
 
+    def test_request_uses_one_discovery_snapshot_for_plan_and_edit(self):
+        with patch.object(command_bank, 'scan', wraps=command_bank.scan) as scan, \
+             patch.object(brain.shutil, 'which', return_value='/usr/bin/tool'), \
+             patch('inference.request', side_effect=AssertionError('model used')):
+            result = brain.chat('open browser and terminal')
+            self.assertTrue(result['action'].startswith('plan:'))
+            self.assertEqual(scan.call_count, 1)
+            scan.reset_mock()
+            result = brain.chat('replace browser with open files', pending_plan=result['action'])
+            self.assertEqual([step['action'] for step in result['steps']], ['files', 'terminal'])
+            self.assertEqual(scan.call_count, 1)
+
+    def test_catalogue_uses_one_discovery_snapshot(self):
+        with patch.object(command_bank, 'scan', wraps=command_bank.scan) as scan:
+            entries = brain.catalogue(self.state, include_personal=True)
+        self.assertIn('bank:plugin:demo.weather', {entry['id'] for entry in entries})
+        self.assertEqual(scan.call_count, 1)
+
+    def test_unregistered_and_unavailable_dynamic_actions_have_no_effects(self):
+        with patch.object(brain, '_execute_command') as execute:
+            # A valid discovered target excluded from the alias bank (for example
+            # by a collision) must not run before receipt validation rejects it.
+            with patch.object(command_bank, 'scan', return_value={'aliases': {}}):
+                with self.assertRaises(ValueError):
+                    brain.execute('bank:plugin:demo.weather')
+            with patch.object(brain.shutil, 'which', return_value=None):
+                with self.assertRaises(ValueError):
+                    brain.execute('param:volume:30')
+            execute.assert_not_called()
+
+    def test_percentage_execution_does_not_scan_plugins(self):
+        with patch.object(command_bank, 'scan', side_effect=AssertionError('unneeded discovery')), \
+             patch.object(brain.shutil, 'which', return_value='/usr/bin/tool'), \
+             patch('parameter_commands.execute', return_value={
+                 'text': 'Volume set to 30%.', 'action': '', 'verified': True}) as execute:
+            self.assertTrue(brain.execute('param:volume:30')['ok'])
+            execute.assert_called_once_with('param:volume:30')
+
+    def test_exact_command_is_matched_once(self):
+        with patch.object(brain, 'smart_match', wraps=brain.smart_match) as match, \
+             patch.object(brain.shutil, 'which', return_value='/usr/bin/tool'):
+            self.assertEqual(brain.chat('open browser')['action'], 'browser')
+            match.assert_called_once_with('open browser')
+
 
 if __name__ == '__main__':
     unittest.main()

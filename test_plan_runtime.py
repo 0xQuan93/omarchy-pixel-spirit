@@ -139,5 +139,26 @@ class PlanRuntimeTests(unittest.TestCase):
             with self.assertRaises(ValueError):runtime.cancel(self.base,value)
         self.assertEqual(get(self.base/'command-progress.json',{}),before)
 
+    def test_helper_cancellation_is_not_reported_as_failure(self):
+        calls=[]
+        def callback(action):
+            calls.append(action)
+            return {'ok':False,'status':'cancelled','text':'Picker dismissed without choosing a theme.'}
+        result=self.execute(callback)
+        self.assertEqual(calls,['first'])
+        self.assertEqual(result['status'],'cancelled')
+        self.assertFalse(result['ok'])
+        self.assertIn('Picker dismissed',result['text'])
+        self.assertEqual(result['receipts'][0]['status'],'cancelled')
+        progress=runtime.status(self.base,TOKEN)
+        self.assertEqual(progress['status'],'cancelled')
+        self.assertEqual([s['status'] for s in progress['steps']],['cancelled','skipped'])
+
+    def test_failed_helper_explanation_survives_plan_summary(self):
+        result=self.execute(lambda _: {'ok':False,'status':'failed','text':'No controllable media player is open.'})
+        self.assertEqual(result['status'],'failed')
+        self.assertIn('No controllable media player is open.',result['text'])
+        self.assertIn('No controllable media player is open.',runtime.status(self.base,TOKEN)['text'])
+
 
 if __name__=='__main__':unittest.main()

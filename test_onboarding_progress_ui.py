@@ -51,6 +51,14 @@ class OnboardingProgressUiTests(unittest.TestCase):
         for(var i=0;i<children.length;i++){var button=testButton(children[i],label);if(button)return button;}return null;
     }
     function testStart(){
+        brain.received({text:"Which player?",choices:[{action:"browser",label:"Browser"},{action:"volume_down",label:"Volume"}],route:"local"});
+        testButton(chatContent,"Mic").clicked();
+        if(root.commandChoices.length!==2)Qt.exit(27);
+        root.voiceReply("Transcribing your recording locally…");
+        listener.received({text:"Second one.",transcript:"Second one."});root.send();
+        if(brain.requests.length || actor.requests.length || root.pending!=="volume_down")Qt.exit(28);
+        root.pending="";root.pendingLabel="";listener.requests=[];
+
         if(root.actionReceiptMood({status:"failed",emote:"happy"},false)!=="idle" || root.actionReceiptMood({status:"cancelled"},true)!=="idle")Qt.exit(20);
         if(root.actionReceiptMood({status:"accepted"},false)!=="working" || root.actionReceiptMood({status:"completed"},false)!=="working" || root.actionReceiptMood({status:"verified"},false)!=="happy")Qt.exit(21);
         if(root.actionReceiptMood({status:"completed",receipts:[{status:"verified"},{status:"accepted"}]},true)!=="working" || root.actionReceiptMood({status:"completed",receipts:[]},true)!=="working" || root.actionReceiptMood({status:"completed",receipts:[{status:"verified"}]},true)!=="happy")Qt.exit(22);
@@ -66,7 +74,9 @@ class OnboardingProgressUiTests(unittest.TestCase):
         finish.forceActiveFocus();
         finish.Keys.returnPressed({accepted:false});
         if(setupCall.requests.length!==1 || setupCall.requests[0][0]!=="setup" || setupCall.requests[0][1]!=="finish")Qt.exit(2);
+        root.showPanel("tools");
         setupCall.received({showSetup:false,completed:true,availableCount:42,unavailableCount:3,sources:[]});
+        if(!root.awarenessOpen)Qt.exit(29);
         if(root.setupOpen || root.awareness.settings.enabled || brain.requests.length || actor.requests.length)Qt.exit(3);
         root.showPanel("setup");
         if(setupCall.requests[1][1]!=="status")Qt.exit(4);
@@ -115,9 +125,21 @@ class OnboardingProgressUiTests(unittest.TestCase):
     }}
     Timer {id:testNoIdlePoll;interval:650;onTriggered:{
         if(planStatusCall.requests.length!==root.settledPollCount || actor.requests.length!==1)Qt.exit(16);
+        var oldProgress=root.planProgress;
+        senses.propose("browser","Open browser");
+        if(root.pending!=="browser" || root.activePlanToken || root.planFinished || root.displayedPlanSteps.length)Qt.exit(30);
+        root.planProgress=oldProgress;root.activePlanToken=root.testToken;root.planFinished=true;
+        root.asideAction="theme_picker";root.asideActionLabel="Choose a theme";root.reviewBubbleAction();
+        if(root.pending!=="theme_picker" || root.activePlanToken || root.planFinished || root.displayedPlanSteps.length)Qt.exit(31);
+        actor.busy=true;senses.propose("browser","Open browser");
+        if(root.pending!=="theme_picker")Qt.exit(32);actor.busy=false;
         root.clearPlanProgress();
         planStatusCall.received({status:"completed",steps:[{label:"Stale result",status:"completed"}]});
         if(root.displayedPlanSteps.length)Qt.exit(17);
+        root.activePlanToken=root.testToken;root.pending=root.testToken;
+        root.planSteps=[{action:"browser",label:"Open browser"}];
+        actor.received({error:"A required control is unavailable. Nothing ran; prepare a new plan."});
+        if(root.pending || root.pendingLabel || root.mood!=="idle" || !root.planFinished)Qt.exit(33);
         console.log("ONBOARDING_PROGRESS_OK");Qt.quit();
     }}
 '''.replace('SETUP_IMAGE', json.dumps(str(capture / 'wisp-onboarding.png'))).replace('PROGRESS_IMAGE', json.dumps(str(capture / 'wisp-plan-progress.png')))

@@ -12,6 +12,8 @@ A native Omarchy companion that grows with the things you make. It roams your de
 
 ## Wisp 2.0 — local tasks, clear results
 
+**2.0.1 maintenance:** clearer plan and voice transitions, stronger state recovery, bounded model-lock waits, corrected theme colors, and safer upgrades. See the [audit and validation record](docs/AUDIT-2026-09-16.md).
+
 Wisp now shares one reviewed capability contract across command discovery, routing, plans, and result reporting. The Commands view explains the affected source, missing software, whether a control supports plans, and what its confirmation proves.
 
 **“Switch theme to Tokyo Night and set volume to 35%”** prepares a numbered plan using your installed theme. Before running it, say **“skip step two,” “only open files,”** or **“replace step two with open terminal.”** These supported requests and edits need no model. Unknown targets or ambiguous edits receive a local explanation.
@@ -129,7 +131,7 @@ Omarchy's existing systemd user timers deliver the desktop notification independ
 
 ## A quieter companion UI
 
-Chat keeps its main controls in one place: **Chat / Room / Self / More**. Commands is directly accessible beside Chat, Room and Self. More holds Thoughts, Settings, Growth, voice and clear/hide actions. Opening a panel closes the previous one. Thoughts shows recent comments first; activity logs and settings details expand only when needed. Self groups naming, influences, lineage previews and local-model controls into expandable sections. The room puts its artwork and activities first, with notes and room details tucked below. Controls use the native Omarchy button and border styles.
+Chat keeps its main controls in one place: **Chat / Room / Self / Commands / More**. More holds Thoughts, Settings, Growth, voice and clear/hide actions. Opening a panel closes the previous one. Thoughts shows recent comments first; activity logs and settings details expand only when needed. Self groups naming, influences, lineage previews and local-model controls into expandable sections. The room puts its artwork and activities first, with notes and room details tucked below. Controls use the native Omarchy button and border styles.
 
 ## Request privacy
 

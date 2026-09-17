@@ -22,11 +22,12 @@ def decorate(entries, phrases):
     return entries
 
 
-def personal_entries(state_dir):
+def personal_entries(state_dir, bank=None):
     import command_bank
     import command_routes
     import shutil
-    bank = command_bank.scan(state_dir=state_dir)
+    if bank is None:
+        bank = command_bank.scan(state_dir=state_dir)
     unique = {}
     for phrase, descriptor in bank['aliases'].items():
         key = command_routes.action_id(descriptor)

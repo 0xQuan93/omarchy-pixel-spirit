@@ -54,11 +54,14 @@ def catalogue(state_dir=None, include_personal=False):
  entries=decorate([controls.describe(key) for key in ACTIONS],PHRASES)
  if include_personal:
   from parameter_commands import catalogue as percentages
-  extras=percentages()+personal_entries(state_dir)
+  import command_bank
+  bank=command_bank.scan(state_dir=state_dir)
+  extras=percentages()+personal_entries(state_dir,bank)
   from plan_extensions import discover
-  expanded=registry(extensions=discover(state_dir))
+  expanded=registry(extensions=discover(state_dir,bank))
+  allowed=expanded.plan_allowed()
   for entry in extras:
-   if entry['id'] in expanded.plan_allowed():
+   if entry['id'] in allowed:
     entry.update({key:value for key,value in expanded.describe(entry['id']).items() if key not in {'id','label','requires'}})
   entries += extras
  return entries

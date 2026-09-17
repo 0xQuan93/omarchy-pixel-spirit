@@ -3,7 +3,6 @@
 import json, os, re, shutil, struct, subprocess, sys, tempfile, urllib.request, wave
 from pathlib import Path
 BASE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state'))) / 'pixel-spirit'
-MODEL = os.environ.get('PIXEL_SPIRIT_MODEL', 'qwen3.5:4b')
 from capabilities import ACTIONS, LABELS, MEDIA_ACTIONS, catalogue
 from smart_commands import match as smart_match, normalize
 import command_routes
@@ -24,9 +23,9 @@ def controls(extensions=None):
  return capability_registry(extensions=extensions)
 def plan_available(action):
  return action in ACTIONS and controls().describe(action)['available']
-def plan_context():
+def plan_context(bank=None):
  import plan_extensions
- extensions=plan_extensions.discover(BASE)
+ extensions=plan_extensions.discover(BASE,bank)
  return ACTIONS|extensions[0], LABELS|extensions[1], controls(extensions)
 def compound_intent(message):
  import command_plans
@@ -34,9 +33,11 @@ def compound_intent(message):
  if not is_candidate(message,normalize):return None
  single=local_intent(message)
  if single and single.get('action'):return single
- actions,labels,registry=plan_context()
+ import command_bank
+ bank=command_bank.scan(state_dir=BASE)
+ actions,labels,registry=plan_context(bank)
  def resolve_clause(text):
-  return parameter_commands.proposal(text) or command_routes.proposal(text,BASE) or local_intent(text)
+  return parameter_commands.proposal(text) or command_routes.proposal(text,BASE,bank) or local_intent(text,registry)
  return command_plans.proposal(message,BASE,actions,labels,normalize,smart_match,resolve_clause,
     lambda a:registry.describe(a)['available'],registry=registry)
 def execute(action):
@@ -45,7 +46,14 @@ def execute(action):
   actions,labels,registry=plan_context()
   return command_plans.execute(action,BASE,actions,labels,lambda a:registry.describe(a)['available'],execute,registry=registry)
  if isinstance(action,str) and action.startswith(('param:','bank:')):
-  _,_,registry=plan_context()
+  # Validate registration and availability before any helper can have effects.
+  if action.startswith('param:'):
+   from plan_extensions import parameters
+   registry=controls(parameters())
+  else:
+   _,_,registry=plan_context()
+  info=registry.describe(action)
+  if not info['available']:raise ValueError(info['availabilityReason'])
   return registry.receipt(action,_execute_command(action))
  if action not in ACTIONS:raise ValueError('Unsupported desktop action')
  registry=controls()
@@ -81,12 +89,13 @@ def context():
  return result
 def direct_action(message):
  return smart_match(message, ACTIONS)
-def local_intent(message):
+def local_intent(message, registry=None):
  from intent_router import resolve
- result=resolve(message,ACTIONS,LABELS,normalize,extra_targets=controls().intent_targets())
+ registry=registry or controls()
+ result=resolve(message,ACTIONS,LABELS,normalize,extra_targets=registry.intent_targets())
  if result is None:return None
  def available(action):
-  return plan_available(action)
+  return action in ACTIONS and registry.describe(action)['available']
  action=result.get('action','')
  if action and not available(action):
   result.update(text='I recognize that command, but its tool is unavailable on this machine.',action='',actionLabel='',choices=[])
@@ -99,20 +108,23 @@ def chat(message, eco=False, pending_plan=""):
  if not message: raise ValueError('Say something first.')
  if pending_plan:
   import command_plans
-  actions,labels,registry=plan_context()
+  import command_bank
+  bank=command_bank.scan(state_dir=BASE)
+  actions,labels,registry=plan_context(bank)
   def resolve_clause(text):
-   return smart_match(text) or parameter_commands.proposal(text) or command_routes.proposal(text,BASE) or local_intent(text)
+   return smart_match(text) or parameter_commands.proposal(text) or command_routes.proposal(text,BASE,bank) or local_intent(text,registry)
   edited=command_plans.edit(message,pending_plan,BASE,actions,labels,resolve_clause,registry)
   if edited is not None:return edited
 
- if not smart_match(message):
+ quick_action=smart_match(message)
+ if not quick_action:
   composed=compound_intent(message)
   if composed is not None:return composed
  local_reply=parameter_commands.proposal(message)
  if local_reply:return local_reply
  local_reply=command_routes.maintenance(message,BASE,normalize)
  if local_reply:return local_reply
- if not direct_action(message):
+ if not quick_action:
   local_reply=command_routes.proposal(message,BASE)
   if local_reply:return local_reply
  from reminders import parse_request
@@ -123,9 +135,10 @@ def chat(message, eco=False, pending_plan=""):
  if message.lower().rstrip('.?!') in ['what can you do','what tools do you have','list tools','show tools','help','list commands','show commands','command library']:
   text='I can propose these tools; choose one and tap Run:\n'+ '\n'.join(t['label']+('' if t['available'] else ' (needs '+t['requires']+')') for t in catalogue())
   return {'text':text,'emote':'reading','action':'','route':'local'}
- action = direct_action(message)
+ action = quick_action
  if action:
-  if not shutil.which(ACTIONS[action][0]):return {'text':'That tool needs '+ACTIONS[action][0]+'. It is not installed.','emote':'idle','action':'','route':'local'}
+  info=controls().describe(action)
+  if not info['available']:return {'text':info['availabilityReason'],'emote':'idle','action':'','route':'local'}
   data = {'text':'Ready: '+LABELS[action]+'. Tap Run below.', 'emote':'playing' if action in ['play_pause','next_track'] else 'working','action':action,'actionLabel':LABELS[action],'route':'local'}
   save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(data)}])[-8:])
   return data
@@ -296,14 +309,10 @@ def main():
   from identity import profile
   setting=args[1] if len(args)>1 else 'status'
   if setting=='avatar':
-   import tomllib
    from growth import get as load_json,view
-   from artwork import export
+   from artwork import export, theme_palette
    p=profile();g=load_json(BASE/'growth.json',{});g=view(g) if g else {'level':0,'traits':{}}
-   colors={'accent':'#86efac','foreground':'#dcece6','background':'#101817'}
-   try:
-    with (BASE.parent/'omarchy/current/theme/colors.toml').open('rb') as f:colors.update(tomllib.load(f))
-   except (OSError,ValueError):pass
+   colors=theme_palette()
    p['avatarPath']=export(p,g,colors);return p
   return profile(setting,args[2] if len(args)>2 else '')
  if command=='name_self':
@@ -312,17 +321,14 @@ def main():
   if not answer.get('chosenName'):raise ValueError('I did not settle on a name. Try again or give me one.')
   return profile('rename',answer['chosenName'])
  if command=='dream_snapshot':
-  import tomllib
+  from artwork import theme_palette
   from identity import profile, appearance
   from growth import get as load_json, view
   from playroom import default
   p=profile();g=load_json(BASE/'growth.json',{})
   g=view(g) if g else {'level':0,'traits':{},'trait':'Maker'}
   room=load_json(BASE/'room.json',default());room['notes']=[{} for n in room['notes']]
-  colors={'accent':'#86efac','foreground':'#dcece6','background':'#101817'}
-  try:
-   with (BASE.parent/'omarchy/current/theme/colors.toml').open('rb') as f:colors.update(tomllib.load(f))
-  except (OSError,ValueError):pass
+  colors=theme_palette()
   return {'profile':p,'growth':g,'room':room,'palette':colors,'appearance':appearance(p,g['traits'])}
  if command=='room':
   from playroom import update
