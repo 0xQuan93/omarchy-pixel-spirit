@@ -28,7 +28,7 @@ _VERB = re.compile(
     r'^(show me|bring up|pull up|shut down|turn on|turn off|turn up|turn down|'
     r'open|launch|show|start|close|quit|exit|pause|resume|unpause|play|stop|hide|'
     r'mute|unmute|enable|disable|activate|deactivate|raise|lower|increase|decrease|'
-    r'configure|adjust|toggle|focus|shut|turn|bring|pull|put)\s+(.+)$')
+    r'set|change|use|switch to|switch|apply|configure|adjust|toggle|focus|shut|turn|bring|pull|put)\s+(.+)$')
 _FORBIDDEN = re.compile(
     r'\b(?:not|never|no|dont|cannot|cant|if|unless|when|after|before|later|tomorrow|'
     r'while|until|once|because|without|except|instead|maybe|perhaps)\b|n\x27t\b')
@@ -77,24 +77,8 @@ def propose(message, resolve_clause, labels, allowed_actions, normalize, rewrite
     on the caller's fixed action allowlist, trustworthy labels and local-only
     callbacks. Unknown modifiers remain part of the clause sent to the resolver.
     """
-    if not isinstance(message, str):
-        return None
+    if not is_candidate(message,normalize):return None
     probe = unicodedata.normalize('NFKC', message).casefold()
-    if not _CONNECTOR.search(probe) and not _SHELL.search(probe):
-        return None
-    # Conjunctions occur in normal conversation, routine definitions and quoted
-    # explanations too. Only an explicit command-leading first clause belongs
-    # to this planner. Inspect the first clause separately so unsafe delimiters
-    # later in an actual command still receive a local rejection.
-    first_raw = re.split(r'\b(?:and|then|but)\b|[;\r\n&|]', probe, maxsplit=1)[0]
-    first_raw = first_raw.strip().strip('\"“”`').strip()
-    if first_raw.startswith("'"):
-        first_raw = first_raw[1:]
-    first = normalize(first_raw) or first_raw
-    first = re.sub(r'^(?:just|i want to|i need to|let me|help me) ', '', first, count=1)
-    first = re.sub(r"^(?:do not|don't|dont|never|not) ", '', first, count=1)
-    if not _VERB.fullmatch(first):
-        return None
     failure = lambda reason, text: _reply(reason, text)
     if len(message) > MAX_LENGTH:
         return failure('too-long', 'Please shorten the request to at most four explicit steps.')
@@ -176,3 +160,25 @@ def propose(message, resolve_clause, labels, allowed_actions, normalize, rewrite
         return failure('conflicting-steps', 'Some requested steps reverse one another. Please choose the final state you want.')
     steps = [{'action': action, 'label': labels[action]} for action in actions]
     return _reply('compound-plan', 'Ready to review ' + str(len(steps)) + ' step' + ('s' if len(steps) != 1 else '') + '. Nothing has run yet.', steps)
+
+
+def is_candidate(message,normalize):
+    if not isinstance(message, str):
+        return False
+    probe = unicodedata.normalize('NFKC', message).casefold()
+    if not _CONNECTOR.search(probe) and not _SHELL.search(probe):
+        return False
+    # Conjunctions occur in normal conversation, routine definitions and quoted
+    # explanations too. Only an explicit command-leading first clause belongs
+    # to this planner. Inspect the first clause separately so unsafe delimiters
+    # later in an actual command still receive a local rejection.
+    first_raw = re.split(r'\b(?:and|then|but)\b|[;\r\n&|]', probe, maxsplit=1)[0]
+    first_raw = first_raw.strip().strip('\"“”`').strip()
+    if first_raw.startswith("'"):
+        first_raw = first_raw[1:]
+    first = normalize(first_raw) or first_raw
+    first = re.sub(r'^(?:just|i want to|i need to|let me|help me) ', '', first, count=1)
+    first = re.sub(r"^(?:do not|don't|dont|never|not) ", '', first, count=1)
+    if not _VERB.fullmatch(first):
+        return False
+    return True

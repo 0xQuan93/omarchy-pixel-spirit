@@ -8,6 +8,7 @@ from capabilities import ACTIONS, LABELS, MEDIA_ACTIONS, catalogue
 from smart_commands import match as smart_match, normalize
 import command_routes
 import parameter_commands
+from capabilities import registry as capability_registry
 
 EMOTES = ['idle','thinking','working','playing','reading','happy','sleeping']
 def run(args, timeout=8):
@@ -19,24 +20,56 @@ def save(name, data):
  from storage import put
  put(BASE/name, data, preserve_previous=bool(data))
 
+def controls(extensions=None):
+ return capability_registry(extensions=extensions)
 def plan_available(action):
- return action in ACTIONS and bool(shutil.which(ACTIONS[action][0]))
+ return action in ACTIONS and controls().describe(action)['available']
+def plan_context():
+ import plan_extensions
+ extensions=plan_extensions.discover(BASE)
+ return ACTIONS|extensions[0], LABELS|extensions[1], controls(extensions)
 def compound_intent(message):
  import command_plans
+ from compound_commands import is_candidate
+ if not is_candidate(message,normalize):return None
  single=local_intent(message)
  if single and single.get('action'):return single
- return command_plans.proposal(message,BASE,ACTIONS,LABELS,normalize,smart_match,local_intent,plan_available)
+ actions,labels,registry=plan_context()
+ def resolve_clause(text):
+  return parameter_commands.proposal(text) or command_routes.proposal(text,BASE) or local_intent(text)
+ return command_plans.proposal(message,BASE,actions,labels,normalize,smart_match,resolve_clause,
+    lambda a:registry.describe(a)['available'],registry=registry)
 def execute(action):
  if isinstance(action,str) and action.startswith('plan:'):
   import command_plans
-  return command_plans.execute(action,BASE,ACTIONS,LABELS,plan_available,execute)
+  actions,labels,registry=plan_context()
+  return command_plans.execute(action,BASE,actions,labels,lambda a:registry.describe(a)['available'],execute,registry=registry)
+ if isinstance(action,str) and action.startswith(('param:','bank:')):
+  _,_,registry=plan_context()
+  return registry.receipt(action,_execute_command(action))
+ if action not in ACTIONS:raise ValueError('Unsupported desktop action')
+ registry=controls()
+ info=registry.describe(action)
+ if not info['available']:raise ValueError(info['availabilityReason'])
+ data=_execute_command(action)
+ from capability_specs import STATE_ACTIONS
+ if action in STATE_ACTIONS and isinstance(data,dict) and not data.get('error') and data.get('ok') is not False:
+  from desktop_verification import verify
+  try:verified=verify(action)
+  except (OSError,ValueError,subprocess.SubprocessError):verified=False
+  data['verified']=verified
+  if not verified:data.update(ok=False,text='The command ran, but I could not confirm the requested state. Check the control before retrying.')
+ if info['verification']=='accepted' and isinstance(data,dict) and data.get('text','').startswith('Done · '):
+  data['text']='Request accepted · '+LABELS[action]
+ return registry.receipt(action,data)
+def _execute_command(action):
  if isinstance(action,str) and action.startswith('param:'):return parameter_commands.execute(action)
  if isinstance(action,str) and action.startswith('bank:'):return command_routes.execute(action,BASE)
  if action not in ACTIONS: raise ValueError('Unsupported desktop action')
  if not shutil.which(ACTIONS[action][0]):raise ValueError('This tool needs '+ACTIONS[action][0]+'. It is not installed.')
  result=run(ACTIONS[action])
  from desktop_commands import IPC_ACTIONS, RECEIPTS, ASYNC_ACTIONS
- accepted=RECEIPTS.get(action, frozenset({'ok'}) if action in IPC_ACTIONS else None)
+ accepted=({'dnd_on':frozenset({'on'}),'dnd_off':frozenset({'off'})}.get(action) or RECEIPTS.get(action, frozenset({'ok'}) if action in IPC_ACTIONS else None))
  if accepted is not None and result.strip() not in accepted:raise ValueError('The desktop did not accept that request. Check that its plugin is enabled.')
  if action in MEDIA_ACTIONS and result.strip()!='ok':raise ValueError('No media player could handle that action. Open a controllable music or video player first.')
  return {'text': ('Request accepted · ' if action in ASYNC_ACTIONS else 'Done · ')+LABELS[action], 'emote':'working','action':'','route':'local'}
@@ -50,10 +83,10 @@ def direct_action(message):
  return smart_match(message, ACTIONS)
 def local_intent(message):
  from intent_router import resolve
- result=resolve(message,ACTIONS,LABELS,normalize)
+ result=resolve(message,ACTIONS,LABELS,normalize,extra_targets=controls().intent_targets())
  if result is None:return None
  def available(action):
-  return action in ACTIONS and bool(shutil.which(ACTIONS[action][0]))
+  return plan_available(action)
  action=result.get('action','')
  if action and not available(action):
   result.update(text='I recognize that command, but its tool is unavailable on this machine.',action='',actionLabel='',choices=[])
@@ -61,9 +94,17 @@ def local_intent(message):
   result['choices']=[choice for choice in result['choices'] if available(choice['action'])]
   if not result['choices']:result['text']='I recognize the request, but those controls are unavailable on this machine.'
  return result
-def chat(message, eco=False):
+def chat(message, eco=False, pending_plan=""):
  message = message.strip()[:4000]
  if not message: raise ValueError('Say something first.')
+ if pending_plan:
+  import command_plans
+  actions,labels,registry=plan_context()
+  def resolve_clause(text):
+   return smart_match(text) or parameter_commands.proposal(text) or command_routes.proposal(text,BASE) or local_intent(text)
+  edited=command_plans.edit(message,pending_plan,BASE,actions,labels,resolve_clause,registry)
+  if edited is not None:return edited
+
  if not smart_match(message):
   composed=compound_intent(message)
   if composed is not None:return composed
@@ -177,13 +218,13 @@ def read_request(stream):
   args=json.loads(frame.decode('utf-8'))
  except (ValueError, UnicodeError, RecursionError):
   raise ValueError('Invalid Wisp request.') from None
- if not isinstance(args,list) or not 1<=len(args)<=3 or not all(isinstance(a,str) for a in args):
-  raise ValueError('Wisp request must contain one to three strings.')
+ if not isinstance(args,list) or not 1<=len(args)<=4 or not all(isinstance(a,str) for a in args):
+  raise ValueError('Wisp request must contain one to four strings.')
  # Check required operands before dispatch; errors never echo the payload.
  arities={'identity':(1,3),'name_self':(1,2),'dream_snapshot':(1,1),
-          'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,3),
+          'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,4),
           'action':(2,2),'listen':(1,1),'speak':(2,2),'load':(1,1),
-          'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'tools':(1,1),'input_gate':(1,1),'bubble_gate':(1,1),'bubble_receipt':(3,3),
+          'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'setup':(2,2),'plan_status':(2,2),'plan_cancel':(2,2),'tools':(1,1),'input_gate':(1,1),'bubble_gate':(1,1),'bubble_receipt':(3,3),
           'reminders':(1,1),'remind':(3,3),'cancel_reminder':(2,2)}
  bounds=arities.get(args[0])
  if bounds is None or not bounds[0]<=len(args)<=bounds[1]:
@@ -198,6 +239,18 @@ def main():
   if command=='reminders':return reminders.upcoming()
   if command=='remind':return reminders.create(args[1],args[2])
   return reminders.cancel(args[1])
+ if command=='setup':
+  import onboarding
+  if args[1]=='finish':onboarding.finish(BASE)
+  elif args[1]!='status':raise ValueError('Unknown setup operation.')
+  return onboarding.status(BASE,catalogue(BASE,include_personal=True))
+ if command in ('plan_status','plan_cancel'):
+  import plan_runtime
+  if command=='plan_status':return plan_runtime.status(BASE,args[1])
+  result=plan_runtime.cancel(BASE,args[1])
+  import command_plans
+  if command_plans.invalidate(BASE,args[1]):result['text']='Cancelled the pending plan.'
+  return result
  if command=='tools':return {'tools':catalogue(BASE,include_personal=True)}
  if command=='bubble_gate':
   from awareness import bubble_gate
@@ -218,6 +271,9 @@ def main():
   from awareness import reflect
   return reflect()
  if command=='restore':
+  import onboarding,plan_runtime
+  first_run=onboarding.status(BASE,catalogue(BASE,include_personal=True))
+  previous_plan=plan_runtime.status(BASE)
   # Marketplace installs skip install.py; first enable builds the local bank.
   try: command_routes.command_bank.scan(state_dir=BASE)
   except (OSError,ValueError):pass
@@ -234,7 +290,7 @@ def main():
     try:reply=json.loads(item['content'])['text']
     except (ValueError,KeyError,TypeError):pass
     break
-  return {'profile':p,'room':room,'growth':growth,'position':read('position.json',{}),
+  return {'onboarding':first_run,'planStatus':previous_plan,'planToken':previous_plan.get('token',''),'profile':p,'room':room,'growth':growth,'position':read('position.json',{}),
           'reply':reply,'recovered':sorted(RECOVERED),'awareness':__import__('awareness').status()}
  if command=='identity':
   from identity import profile
@@ -281,7 +337,7 @@ def main():
  if command=='growth':
   from growth import scan
   return scan()
- if command=='chat': return chat(args[1],len(args)>2 and args[2]=='eco')
+ if command=='chat': return chat(args[1],len(args)>2 and args[2]=='eco',args[3] if len(args)>3 else '')
  if command=='action': return execute(args[1])
  if command=='listen': return listen()
  if command=='speak':

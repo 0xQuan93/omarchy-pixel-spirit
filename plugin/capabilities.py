@@ -37,14 +37,30 @@ LABELS = {
  'dnd_on':'Quiet notifications', 'dnd_off':'Resume notifications',
  'reminders':'Open timers and reminders',
 }
+def registry(availability_override=None, extensions=None):
+ actions=dict(ACTIONS);labels=dict(LABELS);extra={}
+ if extensions:
+  new_actions,new_labels,extra=extensions
+  if set(new_actions)&set(actions):raise ValueError('Extensions cannot replace built-in controls.')
+  actions.update(new_actions);labels.update(new_labels)
+
+ from capability_specs import build
+ return build(actions,labels,availability_override,extra)
+
 def catalogue(state_dir=None, include_personal=False):
  from smart_commands import PHRASES
  from command_catalog import decorate, personal_entries
- entries=decorate([{'id':key,'label':LABELS[key],'available':bool(shutil.which(argv[0])),
-          'requires':argv[0]} for key,argv in ACTIONS.items()], PHRASES)
+ controls=registry()
+ entries=decorate([controls.describe(key) for key in ACTIONS],PHRASES)
  if include_personal:
   from parameter_commands import catalogue as percentages
-  entries += percentages() + personal_entries(state_dir)
+  extras=percentages()+personal_entries(state_dir)
+  from plan_extensions import discover
+  expanded=registry(extensions=discover(state_dir))
+  for entry in extras:
+   if entry['id'] in expanded.plan_allowed():
+    entry.update({key:value for key,value in expanded.describe(entry['id']).items() if key not in {'id','label','requires'}})
+  entries += extras
  return entries
 
 MEDIA_ACTIONS = {'pause_music','play_music','play_pause','next_track'}

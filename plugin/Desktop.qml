@@ -13,6 +13,10 @@ Item {
     property string restoreError: ""
     property bool hidden: false
     property string movement: "roam"
+    property bool setupOpen: false
+    property var setupData: ({})
+    property string setupError: ""
+    property bool setupFinishing: false
     property bool roomOpen: false
     property bool identityOpen: false
     property bool awarenessOpen: false
@@ -51,7 +55,7 @@ Item {
     property bool asidePreview: false
     property bool moreOpen: false
     property bool senseAllowed: stateReady && awareness.settings.enabled && !eco && !hidden && !dreaming && !presenceIdle.isIdle && motionClock>=awareness.settings.quiet_until*1000 && !busy && !choice.busy && !selfName.busy
-    property bool commentAllowed: senseAllowed && !!ToplevelManager.activeToplevel && !ToplevelManager.activeToplevel.fullscreen && !inputs.focused && !opened && !roomOpen && !identityOpen && !awarenessOpen && !remindersOpen && !speaker.busy && !pending
+    property bool commentAllowed: senseAllowed && !!ToplevelManager.activeToplevel && !ToplevelManager.activeToplevel.fullscreen && !inputs.focused && !opened && !roomOpen && !setupOpen && !identityOpen && !awarenessOpen && !remindersOpen && !speaker.busy && !pending
     property bool reflectionDue: false
     onCommentAllowedChanged: {
         if(!commentAllowed){reflection.cancel();asideVisible=false}
@@ -64,7 +68,7 @@ Item {
         mouseGestures:!!root.awareness.settings.mouse_gestures
         activityResponses:!!root.awareness.settings.activity_responses
         revision:root.awareness.settings.revision||0
-        blocked:root.dreaming || root.opened || root.roomOpen || root.identityOpen || root.awarenessOpen || root.remindersOpen || root.busy || root.choiceBusy || dragArea.pressed || !ToplevelManager.activeToplevel || ToplevelManager.activeToplevel.fullscreen
+        blocked:root.dreaming || root.opened || root.roomOpen || root.setupOpen || root.identityOpen || root.awarenessOpen || root.remindersOpen || root.busy || root.choiceBusy || dragArea.pressed || !ToplevelManager.activeToplevel || ToplevelManager.activeToplevel.fullscreen
         onWiggle:root.reactToInput("playing")
         onWelcome:root.reactToInput("happy")
         onAllowedChanged:if(!allowed){root.inputMood="";inputAnimation.stop();avatar.rotation=0;}
@@ -101,7 +105,7 @@ Item {
     property int pats: 0
     property double pauseUntil: 0
     property double motionClock: Date.now()
-    property bool wandering: stateReady && !inputs.focused && !hidden && !dreaming && !opened && !roomOpen && !identityOpen && !awarenessOpen && !remindersOpen && !asideVisible && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
+    property bool wandering: stateReady && !inputs.focused && !hidden && !dreaming && !opened && !roomOpen && !setupOpen && !identityOpen && !awarenessOpen && !remindersOpen && !asideVisible && !busy && !dragArea.pressed && !dragArea.containsMouse && motionClock>pauseUntil && movement!=="stay"
     function roomEvent(action,value) {if(!stateReady)return;roomCall.run(["room",action,value])}
     function headPat() {pats++;patTimer.restart();if(pats>=3){pats=0;patTimer.stop();mood="happy";pauseUntil=Date.now()+5000;roomEvent("pat","");celebrate.restart()}}
     property bool opened: false
@@ -116,6 +120,42 @@ Item {
     property string pendingLabel: ""
     property var commandChoices: []
     property var planSteps: []
+    property var planProgress: ({})
+    property string activePlanToken: ""
+    property string pollingPlanToken: ""
+    property string cancellingPlanToken: ""
+    property bool planFinished: false
+    property bool planFinalReadNeeded: false
+    property bool planStopRequested: false
+    readonly property var displayedPlanSteps: (activePlanToken || planFinished) && Array.isArray(planProgress.steps) ? planProgress.steps.slice(0,4) : planSteps
+    function clearPlanProgress() {
+        planProgress={};activePlanToken="";pollingPlanToken="";cancellingPlanToken="";planFinished=false;planStopRequested=false;planFinalReadNeeded=false
+    }
+    function readPlanProgress() {
+        if(!activePlanToken || planStatusCall.busy)return
+        pollingPlanToken=activePlanToken;planFinalReadNeeded=false;planStatusCall.run(["plan_status",activePlanToken])
+    }
+    function runPendingCommand() {
+        if(busy || !pending || (pendingPlan && !planSteps.length))return
+        if(pendingPlan){
+            activePlanToken=pending;planFinished=false;planStopRequested=false
+            planProgress={status:"running",total:planSteps.length,current:0,steps:planSteps.map(function(step){return {label:step.label,status:"pending"}})}
+        }
+        mood="working";actor.run(["action",pending])
+    }
+    function receivePlanProgress(data) {
+        if(!activePlanToken || data.error || pollingPlanToken!==activePlanToken || (planFinished && data.status==="running"))return
+        if(["running","completed","failed","cancelled","interrupted"].indexOf(data.status)<0 || !Array.isArray(data.steps))return
+        planProgress=data
+    }
+    function actionReceiptMood(data,isPlan) {
+        if(data.error || data.ok===false || ["failed","cancelled","interrupted"].indexOf(data.status)>=0)return "idle"
+        if(isPlan || Array.isArray(data.receipts))return Array.isArray(data.receipts) && data.receipts.length>0 && data.receipts.every(function(receipt){return receipt && receipt.status==="verified"})?"happy":"working"
+        return data.status==="verified"?"happy":"working"
+    }
+    function stepStatusText(status) {
+        return ({pending:"Waiting",running:"Working…",completed:"Finished",verified:"Confirmed",accepted:"Requested",failed:"Failed",skipped:"Not run",unknown:"Not confirmed"})[status]||""
+    }
     readonly property bool pendingPlan: /^plan:[0-9a-f]{32}$/.test(pending)
     onPendingChanged: if(!/^plan:[0-9a-f]{32}$/.test(pending))planSteps=[]
     onCommandChoicesChanged: if(commandChoices.length)planSteps=[]
@@ -129,13 +169,18 @@ Item {
         if(!Array.isArray(data))return []
         return data.slice(0,16).filter(function(c){return c && typeof c.action==="string" && c.action.length>0 && c.action.length<=200 && typeof c.label==="string" && c.label.length>0 && c.label.length<=160}).slice(0,4)
     }
+    function cancelPendingCommand() {
+        // Invalidate an idle preview without letting its receipt overwrite a later request.
+        if(pendingPlan)idlePlanCancelCall.run(["plan_cancel",pending])
+        commandChoices=[];pending="";pendingLabel="";clearPlanProgress();responseSource="local"
+        reply="Cancelled. Nothing was run."
+    }
     function handleCommandChoiceReply(message) {
         // Speech transcripts add sentence punctuation; keep every qualifier.
         var key=message.trim().toLowerCase().replace(/[.!?]+$/, "").trim()
         key=key.replace(/^please,?\s+/, "").replace(/,?\s+please$/, "").trim()
         if((pending || commandChoices.length) && ["cancel","cancel that","never mind","nevermind"].indexOf(key)>=0){
-            commandChoices=[];pending="";pendingLabel="";responseSource="local"
-            reply="Cancelled. Nothing was run.";return true
+            cancelPendingCommand();return true
         }
         if(pending && key==="yes"){
             responseSource="local";reply=pendingPlan?"Review each step below, then tap Run plan.":"Review the command below, then tap Run.";return true
@@ -166,7 +211,7 @@ Item {
     function prepareCommandChoice(choice) {
         if(busy || !choice)return
         var action=choice.action,label=choice.label
-        commandChoices=[];journalOpen=false;pending=action;pendingLabel=label
+        commandChoices=[];clearPlanProgress();journalOpen=false;pending=action;pendingLabel=label
         responseSource="local";reply="Ready: "+label+". Tap Run below."
     }
     property string responseSource: ""
@@ -179,6 +224,7 @@ Item {
     function showPanel(destination) {
         asideVisible=false;moreOpen=false;commandChoices=[]
         opened=destination==="chat"
+        setupOpen=destination==="setup"
         roomOpen=destination==="room"
         identityOpen=destination==="self"
         remindersOpen=destination==="reminders"
@@ -187,6 +233,7 @@ Item {
         if(awarenessOpen){senses.page=destination;awarenessConfig.run(["awareness"])}
         if(destination==="tools")toolCall.run(["tools"])
         if(remindersOpen)reminderList.run(["reminders"])
+        if(setupOpen)setupCall.run(["setup","status"])
     }
     function presentBubble(data) {
         asideVisible=false
@@ -213,8 +260,11 @@ Item {
     function send() {
         if (busy || !field.text.trim()) return
         if(handleCommandChoiceReply(field.text)){field.text="";return}
-        commandChoices=[];planSteps=[];journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
-        brain.run(["chat",field.text,eco?"eco":"normal"]); field.text=""
+        var planContext=pendingPlan?pending:""
+        var request=["chat",field.text,eco?"eco":"normal"]
+        if(planContext)request.push(planContext)
+        commandChoices=[];planSteps=[];clearPlanProgress();journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
+        brain.run(request); field.text=""
     }
     IpcHandler {
         target: "pixel-spirit"
@@ -235,7 +285,7 @@ Item {
         function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({responseSource:root.responseSource,pending:root.pending,pendingLabel:root.pendingLabel,choiceCount:root.commandChoices.length,planStepCount:root.planSteps.length,hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
+        function status(): string { return JSON.stringify({responseSource:root.responseSource,pending:root.pending,pendingLabel:root.pendingLabel,choiceCount:root.commandChoices.length,planStepCount:root.displayedPlanSteps.length,planStatus:root.planProgress.status||"",setup:root.setupOpen,hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.toggle()}}
@@ -265,6 +315,31 @@ Item {
     Call { id: growthCall; onReceived: function(d) {if(d.error)root.growthError=d.error;else {root.growth=d;root.growthError=""}} }
     Timer { interval:root.eco?1800000:600000; running:!root.busy; repeat:true; onTriggered:growthCall.run(["growth"]) }
     Call { id: saver }
+    Call {id:setupCall;onReceived:function(d){
+        if(d.error){root.setupError=d.error;root.setupFinishing=false;return}
+        root.setupData=d;root.setupError=""
+        if(root.setupFinishing){root.setupFinishing=false;if(d.completed===true)root.showPanel("");else root.setupError=d.text||"Setup did not finish. Try again."}
+    }}
+    SetupPanel {
+        id:introduction
+        visible:root.setupOpen && root.stateReady && !root.dreaming
+        setup:root.setupData;busy:setupCall.busy;error:root.setupError
+        onCloseRequested:root.showPanel("")
+        onFinishRequested:{if(!setupCall.busy){root.setupFinishing=true;setupCall.run(["setup","finish"])}}
+        onCommandsRequested:root.showPanel("tools")
+        onSettingsRequested:root.showPanel("settings")
+    }
+    Call {id:planStatusCall
+        onReceived:function(d){root.receivePlanProgress(d)}
+        onBusyChanged:if(!busy && root.planFinalReadNeeded)Qt.callLater(root.readPlanProgress)
+    }
+    Call {id:idlePlanCancelCall}
+    Call {id:planCancelCall;onReceived:function(d){
+        if(!root.activePlanToken || root.cancellingPlanToken!==root.activePlanToken || root.planFinished)return
+        root.reply=d.error||d.text||"Stop requested. The current step may still finish."
+        root.responseSource="local";if(!d.error)root.planStopRequested=true
+    }}
+    Timer {interval:500;running:actor.busy && !!root.activePlanToken && !root.planFinished;repeat:true;triggeredOnStart:true;onTriggered:root.readPlanProgress()}
     Call {id:toolCall;onReceived:function(d){if(!d.error)root.tools=d.tools}}
     Call {id:awarenessConfig;onReceived:function(d){if(d.error && !d.settings)root.awarenessDetail=d.error;else{root.awareness=d;root.awarenessDetail=d.error||""}}}
     Call {id:observer;onReceived:function(d){
@@ -337,13 +412,15 @@ Item {
             root.targetX=root.posX;root.targetY=root.posY
             root.reply=d.recovered.length ? "Recovered saved progress from a backup ("+d.recovered.join(", ")+").\n\n"+d.reply : d.reply
             root.restoreError="";root.stateReady=true
+            if(d.onboarding){root.setupData=d.onboarding;if(d.onboarding.showSetup){root.setupOpen=true;root.opened=false;root.asideVisible=false}}
+            if(d.planStatus){root.planProgress=d.planStatus;root.activePlanToken=d.planToken||"";root.planFinished=true;if(d.planStatus.status==="interrupted" && !root.setupOpen)root.opened=true}
             growthCall.run(["growth"]);toolCall.run(["tools"])
         }
     }
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
-    Call { id: brain; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.planSteps=!d.error?root.previewPlanSteps(root.pending,d.steps):[];root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
-    Call { id: actor; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(!d.error){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
+    Call { id: brain; onReceived: function(d) { root.clearPlanProgress();root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.planSteps=!d.error?root.previewPlanSteps(root.pending,d.steps):[];root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
+    Call { id: actor; onReceived: function(d) { var receiptMood=root.actionReceiptMood(d,!!root.activePlanToken);if(root.activePlanToken){root.planFinished=true;root.planProgress=Object.assign({},root.planProgress,{status:["cancelled","interrupted"].indexOf(d.status)>=0?d.status:(d.error||d.ok===false?"failed":"completed"),text:d.error||d.text});root.planFinalReadNeeded=true;root.readPlanProgress()}root.reply=d.error||d.text; root.mood=receiptMood; if(!d.error){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
     Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.reply="Transcribing your recording locally…" } }
     Call { id: listener; onReceived: function(d) { root.reply=d.error||d.text; root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
     Call { id: speaker; onReceived: function(d) { if(d.error) root.reply="Voice: "+d.error } }
@@ -452,6 +529,7 @@ Item {
                     Action {text:"Thoughts";onClicked:root.showPanel("thoughts")}
                     Action {text:"Commands";onClicked:root.showPanel("tools")}
                     Action {text:"Settings";onClicked:root.showPanel("settings")}
+                    Action {text:"Getting started";onClicked:root.showPanel("setup")}
                     Action {text:"Timers / Reminders";onClicked:root.showPanel("reminders")}
                     Action {text:"Growth";onClicked:{root.journalOpen=true;root.moreOpen=false;growthCall.run(["growth"])}}
                     Action {text:root.voice?"Voice on":"Voice off";selected:root.voice;onClicked:{root.voice=!root.voice;root.moreOpen=false;root.persist()}}
@@ -459,7 +537,7 @@ Item {
                     Action {text:"Hide";onClicked:{root.showPanel("");root.hidden=true;root.persist()}}
                 }
                 Flickable {
-                    width:parent.width;height:root.journalOpen?180:(root.commandChoices.length>0 || root.planSteps.length>0)?Math.min(130,Math.max(44,answer.implicitHeight)):130;contentHeight:answer.implicitHeight;clip:true
+                    width:parent.width;height:root.journalOpen?180:(root.commandChoices.length>0 || root.displayedPlanSteps.length>0)?Math.min(130,Math.max(44,answer.implicitHeight)):130;contentHeight:answer.implicitHeight;clip:true
                     boundsBehavior:Flickable.StopAtBounds;Controls.ScrollBar.vertical:Controls.ScrollBar {}
                     Text {id:answer;width:parent.width-8;text:!root.stateReady?(root.restoreError||"Restoring your saved companion…"):root.journalOpen?(root.growthError||Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")):root.reply;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
                 }
@@ -504,10 +582,10 @@ Item {
                     }
                 }
                 Column {
-                    visible:!!root.pending;width:parent.width;spacing:6
-                    Text {width:parent.width;text:root.pendingLabel;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                    visible:!!root.pending || root.displayedPlanSteps.length>0;width:parent.width;spacing:6
+                    Text {width:parent.width;text:(actor.busy && !root.planFinished && root.planProgress.total)?"Step "+(root.planProgress.current+1)+" of "+root.planProgress.total:root.pendingLabel || (root.planProgress.status==="interrupted"?"Previous plan stopped":root.planProgress.status==="failed"?"Plan stopped at an unsuccessful step":root.planProgress.status==="cancelled"?"Plan stopped":"Plan result");textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
                     Flickable {
-                        visible:root.pendingPlan && root.planSteps.length>0
+                        visible:root.displayedPlanSteps.length>0
                         width:parent.width;height:Math.min(planList.implicitHeight,150)
                         contentHeight:planList.implicitHeight;clip:true
                         boundsBehavior:Flickable.StopAtBounds
@@ -515,16 +593,16 @@ Item {
                         Column {
                             id:planList;width:parent.width-8;spacing:6
                             Repeater {
-                                model:root.planSteps
+                                model:root.displayedPlanSteps
                                 Ui.BorderSurface {
                                     required property var modelData
                                     required property int index
                                     width:planList.width;height:planStepLabel.implicitHeight+16
-                                    color:Qt.alpha(Color.accent,0.035);radius:Style.cornerRadius
+                                    color:Qt.alpha(Color.accent,modelData.status==="running"?0.14:0.035);radius:Style.cornerRadius
                                     borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)
                                     Text {
                                         id:planStepLabel;x:8;y:8;width:parent.width-16
-                                        text:(parent.index+1)+". "+parent.modelData.label;textFormat:Text.PlainText
+                                        text:(parent.index+1)+". "+parent.modelData.label+(root.stepStatusText(parent.modelData.status)?" · "+root.stepStatusText(parent.modelData.status):"");textFormat:Text.PlainText
                                         wrapMode:Text.Wrap;color:Color.foreground
                                         font.family:Style.font.family;font.pixelSize:Style.font.bodySmall
                                     }
@@ -532,10 +610,13 @@ Item {
                             }
                         }
                     }
-                    Row {spacing:6
-                        Action {text:actor.busy?"Running…":root.pendingPlan?"Run plan":"Run";enabled:!root.busy && (!root.pendingPlan || root.planSteps.length>0);onClicked:{root.mood="working";actor.run(["action",root.pending])}}
-                        Action {text:"Cancel";enabled:!root.busy;onClicked:{root.pending="";root.pendingLabel="";root.reply="Cancelled. Nothing was run."}}
+                    Flow {width:parent.width;spacing:6
+                        Action {visible:!!root.pending;text:actor.busy?"Running…":root.pendingPlan?"Run plan":"Run";enabled:!root.busy && (!root.pendingPlan || root.planSteps.length>0);onClicked:root.runPendingCommand()}
+                        Action {visible:!!root.pending && !actor.busy;text:"Cancel";enabled:!root.busy;onClicked:root.cancelPendingCommand()}
+                        Action {visible:actor.busy && !root.planFinished && !!root.activePlanToken;text:root.planStopRequested?"Stop requested":"Stop after this step";enabled:!root.planStopRequested && !planCancelCall.busy;onClicked:{root.cancellingPlanToken=root.activePlanToken;planCancelCall.run(["plan_cancel",root.activePlanToken])}}
+                        Action {visible:!root.pending && root.displayedPlanSteps.length>0;text:"Dismiss result";onClicked:root.clearPlanProgress()}
                     }
+                    Text {visible:actor.busy && !root.planFinished && !!root.activePlanToken;width:parent.width;text:"Stopping cannot undo completed steps. The current operation may finish.";wrapMode:Text.Wrap;color:Color.foreground;opacity:0.65;font.family:Style.font.family;font.pixelSize:Style.font.caption}
                 }
                 Controls.TextField {
                     id:field;width:parent.width;height:36;placeholderText:root.busy?"One moment…":"Try “change my theme”…";enabled:!root.busy

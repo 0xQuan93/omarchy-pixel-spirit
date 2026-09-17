@@ -1,3 +1,7 @@
+# Wisp 2.0 note
+
+The intent layer below now participates in the shared [capability contract](CAPABILITIES.md). Explicit compounds and pending-plan edits run through their dedicated local planners before model fallback.
+
 # Local intent interpretation
 
 Exact phrases remain the first path for established commands. When those miss, Wisp can compose a request from a reviewed operation, named target, and supported qualifier. `intent_router.py` is a pure parser: it performs no I/O, inference, execution, or learning.

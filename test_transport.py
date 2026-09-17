@@ -64,7 +64,7 @@ class TransportTests(unittest.TestCase):
                 stdin.buffer = io.BytesIO(frame(args))
                 b.main()
                 if args[0] == 'chat':
-                    chat.assert_called_once_with(args[1], True)
+                    chat.assert_called_once_with(args[1], True, "")
                 else:
                     self.assertEqual(run.call_args.args[0], ['espeak-ng', '-s', '165', '--stdin'])
                     self.assertEqual(run.call_args.kwargs['input'], args[1])

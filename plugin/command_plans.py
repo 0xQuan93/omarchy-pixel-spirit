@@ -7,52 +7,88 @@ import time
 from pathlib import Path
 from storage import get, put
 
-# Focus-dependent window commands, toggles, destructive operations and arbitrary
-# discovered targets deliberately require individual requests.
-ALLOWED = frozenset({
-    'browser', 'terminal', 'files', 'notes', 'settings', 'appearance',
-    'theme_picker', 'background_picker', 'settings_audio', 'settings_bluetooth',
-    'settings_network', 'settings_display', 'keybindings', 'about',
-    'volume_up', 'volume_down', 'mute', 'unmute', 'brightness_up', 'brightness_down',
-    'dnd_on', 'dnd_off', 'power_saver', 'power_balanced',
-    'radio_random', 'radio_stop', 'cartoons_on', 'cartoons_off', 'cartoons_close',
-    'cartoons_hide', 'cartoons_pause', 'cartoons_resume', 'cartoons_mute',
-    'cartoons_unmute', 'cartoons_on_muted', 'q_cut', 'resonant', 'wanderer',
-})
 TTL = 300
 
-def rewrite(actions):
-    actions = list(actions)
-    # Mute before loading any cartoon audio, even when another source opens first.
-    if 'cartoons_on' in actions and 'cartoons_mute' in actions:
-        actions[actions.index('cartoons_on')] = 'cartoons_on_muted'
-        actions.remove('cartoons_mute')
-    return actions
+def _registry(actions,labels,available):
+    from capability_specs import build
+    return build(actions,labels,available)
 
-def proposal(message, base, actions, labels, normalize, match, resolve, available):
+def proposal(message, base, actions, labels, normalize, match, resolve, available, registry=None):
     from compound_commands import propose
+    registry=registry or _registry(actions,labels,available)
     def clause(text):
         action = match(text)
         return action or resolve(text)
-    reply = propose(message, clause, labels, ALLOWED & actions.keys(), normalize, rewrite)
+    reply = propose(message, clause, labels, registry.plan_allowed(), normalize, registry.rewrite_plan)
     if not reply or not reply.get('steps'):
         return reply
-    steps = reply['steps']
-    if not all(available(step['action']) for step in steps):
+    return prepare_steps([step['action'] for step in reply['steps']],base,actions,labels,registry)
+
+def prepare_steps(ids,base,actions,labels,registry):
+    from compound_commands import _conflict
+    if (not 1<=len(ids)<=4 or len(set(ids))!=len(ids) or any(a not in registry.plan_allowed() for a in ids)
+            or any(_conflict(a,b) for i,a in enumerate(ids) for b in ids[i+1:])):
+        raise ValueError('The plan contains unsupported or conflicting steps.')
+    ids=registry.rewrite_plan(ids)
+    if not ids:raise ValueError('The plan could not be validated.')
+    if not all(registry.describe(a)['available'] for a in ids):
         return dict(text='One of those controls is unavailable here. Nothing has run. Try each request separately.',
                     action='', steps=[], emote='idle', route='local')
-    token = secrets.token_hex(16)
-    base = Path(base)
-    base.mkdir(parents=True, exist_ok=True)
-    with (base / 'command-plan.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        put(base / 'command-plan.json', dict(token=token, created=time.time(),
-            actions=[s['action'] for s in steps]), preserve_previous=False)
-    reply.update(action='plan:' + token, actionLabel='Run ' + str(len(steps)) + ' steps',
-                 text='Ready: review these steps, then tap Run plan. This plan expires in five minutes.')
-    return reply
+    token=secrets.token_hex(16);base=Path(base);base.mkdir(parents=True,exist_ok=True)
+    with (base/'command-plan.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        put(base/'command-plan.json',dict(token=token,created=time.time(),actions=list(ids),
+            fingerprints={a:registry.fingerprint(a) for a in ids}),preserve_previous=False)
+    return _preview(token,ids,labels,'Ready: review these steps, then tap Run plan. This plan expires in five minutes.')
 
-def execute(token, base, actions, labels, available, run_step):
+def _preview(token,ids,labels,text):
+    return dict(action='plan:'+token,actionLabel='Run '+str(len(ids))+(' step' if len(ids)==1 else ' steps'),
+                text=text,steps=[dict(action=a,label=labels[a]) for a in ids],emote='working',route='local')
+
+def pending(base,token,registry):
+    if not isinstance(token,str) or not re.fullmatch(r'plan:[0-9a-f]{32}',token):raise ValueError('Invalid plan token.')
+    plan=get(Path(base)/'command-plan.json',{})
+    ids=plan.get('actions');created=plan.get('created')
+    if (plan.get('token')!=token[5:] or type(created) not in (int,float) or not 0<=time.time()-created<=TTL
+            or not isinstance(ids,list) or not 1<=len(ids)<=4
+            or any(not isinstance(a,str) or a not in registry.plan_allowed() for a in ids)
+            or plan.get('fingerprints')!={a:registry.fingerprint(a) for a in ids}):
+        raise ValueError('That plan expired, changed, or already ran. Please prepare a new plan.')
+    return ids
+
+def invalidate(base,token):
+    base=Path(base);base.mkdir(parents=True,exist_ok=True)
+    with (base/'command-plan.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        if get(base/'command-plan.json',{}).get('token')==token[5:]:
+            put(base/'command-plan.json',{},False)
+            return True
+    return False
+
+def edit(message,token,base,actions,labels,resolve_clause,registry):
+    from plan_edits import propose
+    try:ids=pending(base,token,registry)
+    except ValueError as error:return dict(text=str(error),action='',steps=[],emote='idle',route='local')
+    result=propose(message,ids,labels,resolve_clause,registry)
+    if result is None:
+        return _preview(token[5:],ids,labels,'This plan is still waiting for review. Try “skip step two,” “only open files,” or “cancel” before starting a different request.')
+    if result.get('reason')=='empty-plan':
+        invalidate(base,token);return result
+    if not result.get('steps'):
+        return _preview(token[5:],ids,labels,result['text']+' Your existing plan is unchanged.')
+    new=prepare_steps([step['action'] for step in result['steps']],base,actions,labels,registry)
+    if not new.get('action'):
+        return _preview(token[5:],ids,labels,new['text']+' Your existing plan is unchanged.')
+    return new
+
+def execute(token, base, actions, labels, available, run_step, registry=None):
+    import plan_runtime
+    with plan_runtime.execution_lock(base):
+        return _execute(token,base,actions,labels,available,run_step,registry)
+
+def _execute(token, base, actions, labels, available, run_step, registry=None):
+    import plan_runtime
+    registry=registry or _registry(actions,labels,available)
     if not isinstance(token, str) or not re.fullmatch(r'plan:[0-9a-f]{32}', token):
         raise ValueError('Invalid command plan.')
     base = Path(base)
@@ -68,22 +104,44 @@ def execute(token, base, actions, labels, available, run_step):
         created = plan.get('created')
         if (type(created) not in (int, float) or not 0 <= time.time()-created <= TTL
                 or not isinstance(ids, list) or not 1 <= len(ids) <= 4
-                or any(not isinstance(a, str) or a not in ALLOWED or a not in actions for a in ids)):
+                or any(not isinstance(a, str) or a not in registry.plan_allowed() or a not in actions for a in ids)):
             raise ValueError('This plan is invalid or expired. Ask again to prepare it.')
+        if plan.get('fingerprints') != {a:registry.fingerprint(a) for a in ids}:
+            raise ValueError('These controls changed since the preview. Prepare a new plan.')
+        if registry.rewrite_plan(ids) != tuple(ids):
+            raise ValueError('This plan needs a fresh review.')
         if not all(available(a) for a in ids):
             raise ValueError('A required control is unavailable. Nothing ran; prepare a new plan.')
+    plan_runtime.begin(base,token,ids,labels)
     completed = []
-    for action in ids:
+    accepted = []
+    finished = []
+    receipts = []
+    for index,action in enumerate(ids):
+        if not plan_runtime.start_step(base,token,index):
+            text=(_summary(completed,accepted)+'Stopped before: '+labels[action]+'.').strip()
+            plan_runtime.update(base,token,status='cancelled',text=text)
+            return dict(text=text,action='',emote='idle',route='local',status='cancelled',ok=False,completed=completed,accepted=accepted)
         try:
             receipt = run_step(action)
-            if not isinstance(receipt, dict) or receipt.get('error') or receipt.get('ok') is False:
+            if (not isinstance(receipt, dict) or receipt.get('error') or receipt.get('ok') is not True
+                    or receipt.get('status') not in {'accepted','completed','verified'}):
                 raise ValueError('The control did not confirm success.')
         except Exception:
-            remaining = ids[len(completed)+1:]
-            text = ('Completed: ' + '; '.join(completed) + '. ' if completed else 'No steps completed. ')
+            remaining = ids[len(finished)+1:]
+            text = _summary(completed,accepted) or 'No steps completed. '
             text += 'Stopped at: ' + labels[action] + '.'
             if remaining: text += ' Not run: ' + '; '.join(labels[a] for a in remaining) + '.'
-            return dict(text=text, action='', emote='idle', route='local', completed=completed, ok=False)
-        completed.append(labels[action])
-    return dict(text='Completed: ' + '; '.join(completed) + '.', action='',
-                emote='working', route='local', completed=completed, ok=True)
+            plan_runtime.update(base,token,index,'failed',status='failed',text=text)
+            return dict(text=text, action='', emote='idle', route='local', completed=completed, accepted=accepted, receipts=receipts, ok=False, status='failed')
+        plan_runtime.update(base,token,index,'accepted' if receipt['status']=='accepted' else 'completed')
+        finished.append(action)
+        receipts.append(dict(action=action,status=receipt['status'],verification=receipt.get('verification','process')))
+        (accepted if receipt['status']=='accepted' else completed).append(labels[action])
+    plan_runtime.update(base,token,status='completed',text=_summary(completed,accepted).strip())
+    return dict(text=_summary(completed,accepted).strip(), action='',
+                emote='working', route='local', completed=completed, accepted=accepted,
+                receipts=receipts, ok=True, status='accepted' if accepted else 'completed')
+
+def _summary(completed,accepted):
+    return (('Completed: '+'; '.join(completed)+'. ') if completed else '') + (('Requests accepted: '+'; '.join(accepted)+'. ') if accepted else '')

@@ -23,9 +23,20 @@ FocusScope {
         return tools.filter(function(t) {
             if (root.availableOnly && !t.available) return false;
             if (root.category !== "All commands" && (t.group || "Other") !== root.category) return false;
-            var haystack = [t.label || "", t.description || "", t.group || "", (t.examples || []).join(" ")].join(" ").toLowerCase();
+            var haystack = [t.label || "", t.description || "", t.group || "", t.sourceLabel || "", t.availabilityReason || "", (t.examples || []).join(" ")].join(" ").toLowerCase();
             return words.every(function(word) { return haystack.indexOf(word) !== -1; });
         });
+    }
+    function unavailableReason(tool) {
+        return typeof tool.availabilityReason === "string" && tool.availabilityReason.length ? tool.availabilityReason : "Needs " + (tool.requires || "an available desktop service");
+    }
+    function controlDetails(tool) {
+        var lines = [];
+        if (typeof tool.sourceLabel === "string" && tool.sourceLabel.length) lines.push("Uses " + tool.sourceLabel);
+        var verification = {accepted: "Confirms the request was accepted.", state: "Checks that the change took effect.", process: "Reports whether the command finished."};
+        if (Object.prototype.hasOwnProperty.call(verification, tool.verification)) lines.push(verification[tool.verification]);
+        if (typeof tool.planSafe === "boolean") lines.push(tool.planSafe ? "Can be included in a reviewed plan." : "Use this command on its own.");
+        return lines.join("\n");
     }
     function focusSearch() { search.forceActiveFocus(); }
     function prepare(tool) {
@@ -143,13 +154,15 @@ FocusScope {
             id: card
             required property var modelData
             required property int index
+            readonly property string details: root.controlDetails(modelData)
+            readonly property bool detailsVisible: hovered || activeFocus || commands.currentIndex === index
             width: commands.width - 10
             implicitHeight: content.implicitHeight + 24
             padding: 12
             hoverEnabled: true
             activeFocusOnTab: true
             Accessible.name: modelData.label + (modelData.available ? ", prepare command" : ", unavailable")
-            Accessible.description: modelData.description || ""
+            Accessible.description: [modelData.description || "", details, modelData.available ? "" : root.unavailableReason(modelData)].filter(function(s) { return s.length > 0; }).join(" ")
             onClicked: { commands.currentIndex = index; root.prepare(modelData); }
             background: Ui.BorderSurface {
                 radius: Style.cornerRadius
@@ -204,13 +217,25 @@ FocusScope {
                 Text {
                     width: parent.width
                     visible: !card.modelData.available
-                    text: "Needs " + (card.modelData.requires || "an available desktop service")
+                    text: root.unavailableReason(card.modelData)
                     textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                     color: Color.foreground
                     opacity: 0.65
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
+                }
+                Text {
+                    width: parent.width
+                    visible: card.detailsVisible && card.details.length > 0
+                    text: card.details
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    color: Color.foreground
+                    opacity: 0.65
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    lineHeight: 1.2
                 }
             }
         }

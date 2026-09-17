@@ -10,6 +10,20 @@ A native Omarchy companion that grows with the things you make. It roams your de
 
 *Dream-room preview uses sample state; no personal notes or identity are included.*
 
+## Wisp 2.0 — local tasks, clear results
+
+Wisp now shares one reviewed capability contract across command discovery, routing, plans, and result reporting. The Commands view explains the affected source, missing software, whether a control supports plans, and what its confirmation proves.
+
+**“Switch theme to Tokyo Night and set volume to 35%”** prepares a numbered plan using your installed theme. Before running it, say **“skip step two,” “only open files,”** or **“replace step two with open terminal.”** These supported requests and edits need no model. Unknown targets or ambiguous edits receive a local explanation.
+
+During execution, each row shows its progress. Accepted launches remain **Requested**; verified results and failures receive distinct feedback. **Stop after this step** prevents later operations. An interrupted plan stays stopped after a restart and shows a recovery summary.
+
+**Getting started** introduces local controls and settings without enabling AI or awareness. Existing companions keep their identity and progress. Open it later from **More → Getting started**.
+
+![Native first-run introduction](assets/getting-started.png)
+
+See the [capability and adapter contract](docs/CAPABILITIES.md) for supported extensions, evidence levels, cancellation, and portability limits.
+
 ## Meet your familiar
 
 - **Four evolution classes, sixteen silhouettes:** Forgewright, Prismweaver, Resonant, Lorekeeper.
@@ -59,7 +73,7 @@ Conflicting interpretations ask rather than pick by pattern order. Meaningful so
 
 **“Open the browser and the terminal,” “open files then lower the volume,”** and **“open settings and mute the audio”** prepare a numbered plan without calling a model. Up to four explicit steps can be joined with **and**, **then**, or **but**; an **and** target list can share its opening verb. Tap **Run plan** to execute the reviewed sequence.
 
-Every step must resolve to a supported fixed action before a plan is offered. Unknown targets, ambiguous pronouns, conditions, conflicting instructions, and unsupported operations get a local explanation with no partial execution. Focus-dependent window actions and toggles require separate requests. Named themes and discovered plugin panels remain individual commands for now.
+Every step must resolve to a supported fixed action before a plan is offered. Unknown targets, ambiguous pronouns, conditions, conflicting instructions, and unsupported operations get a local explanation with no partial execution. Focus-dependent window actions and toggles require separate requests. Installed named themes, supported enabled plugin panels, and bounded percentage controls also participate in plans.
 
 Plans expire after five minutes, can run once, and stop at the first failed step with a completion summary. Preparing a newer plan replaces the older one. Cancel clears the preview. Availability is checked before execution, but runtime failures can still occur; completed steps are not rolled back or retried. Ordinary conversation still uses local AI.
 
@@ -69,7 +83,7 @@ Source-specific media integrations can provide reviewed fixed actions and an ada
 
 Common requests use a deterministic phrase bank before Ollama. No model is needed for **“change my theme,” “change wallpaper,” “open audio settings,” “show keyboard shortcuts,” “clipboard history,” “keep my computer awake,”** or **“show the bar.”** Public Wisp keeps the existing **Run** review step. A theme request without a name opens the native chooser; **“change my theme to Tokyo Night”** offers that exact installed theme. Background, font, app, plugin, default-app, learning, capture, recording, install, update and power menus are included. Opening a menu does not choose its options for you.
 
-The built-in bank contains 22,179 unique normalized whole-utterance phrases for 112 actions. Polite wrappers are supported; quoted, negated, conditional, delayed and compound prose does not match a built-in command. **“Turn on night light”** and **“turn off night light”** request explicit states; **“toggle night light”** remains a separate operation. Unsupported wording still uses normal chat. Say **“list commands”** for the fixed catalogue.
+The built-in bank contains 22,179 unique normalized whole-utterance phrases for 112 actions. Polite wrappers are supported. Quoted, negated, conditional and delayed prose does not match a built-in command; supported compound requests use the separate reviewed planner. **“Turn on night light”** and **“turn off night light”** request explicit states; **“toggle night light”** remains a separate operation. Unsupported wording still uses normal chat. Say **“list commands”** for the fixed catalogue.
 
 The everyday-language pass adds 215 reviewed phrases across 77 actions: **“turn the music down a bit,” “bring up my folders,” “change the colour theme,” “let me choose which speakers to use,”** and **“restore normal idle behaviour.”** UK/US spelling, contractions, and plain descriptions are supported where the requested action is clear. Named themes also accept **“apply the Tokyo Night theme”**; supported plugin panels accept **“show me the weather plugin”** using their installed names. These are exact requests, not guesses from complaints such as “I cannot hear.”
 

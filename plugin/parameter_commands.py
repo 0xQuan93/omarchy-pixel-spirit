@@ -1,5 +1,6 @@
 """Exact, typed percentage controls. No free-form command interpolation."""
 import re
+from decimal import Decimal
 import shutil
 import subprocess
 from smart_commands import normalize
@@ -36,18 +37,47 @@ def resolve(action):
 
 def execute(action):
     argv = resolve(action)
-    if not shutil.which(argv[0]):
-        raise ValueError('This control needs ' + argv[0] + '.')
-    subprocess.run(argv, capture_output=True, text=True, timeout=12, check=True)
     _, kind, amount = action.split(':')
-    return {'text': f'{kind.capitalize()} set to {amount}%.', 'action': '',
-            'emote': 'working', 'route': 'local'}
+    verification = 'state' if kind == 'volume' else 'process'
+    def failed(text):
+        return {'text': text, 'action': '', 'emote': 'reading', 'route': 'local',
+                'ok': False, 'status': 'failed', 'verification': verification,
+                'verified': False}
+    if not shutil.which(argv[0]):
+        return failed('This control needs ' + argv[0] + '.')
+    try:
+        subprocess.run(argv, capture_output=True, text=True, timeout=12, check=True)
+    except (OSError, subprocess.SubprocessError):
+        return failed(f'The {kind} command did not finish successfully. The requested state is unconfirmed.')
+    if kind == 'brightness':
+        return {'text': f'Brightness command finished ({amount}%).', 'action': '',
+                'emote': 'working', 'route': 'local', 'ok': True,
+                'status': 'completed', 'verification': 'process'}
+    try:
+        result = subprocess.run(['wpctl', 'get-volume', '@DEFAULT_AUDIO_SINK@'],
+                                capture_output=True, text=True, timeout=2, check=True)
+        match = re.fullmatch(r'Volume:\s+(\d+(?:\.\d+)?)(?:\s+\[MUTED\])?\s*', result.stdout)
+    except (OSError, subprocess.SubprocessError):
+        return failed('The volume command finished, but I could not confirm the requested level.')
+    if not match or abs(Decimal(match[1]) - Decimal(amount) / 100) > Decimal('0.005'):
+        return failed('The volume command finished, but the requested level was not confirmed. Check Sound settings.')
+    return {'text': f'Volume confirmed at {amount}%.', 'action': '',
+            'emote': 'working', 'route': 'local', 'ok': True,
+            'status': 'verified', 'verification': 'state', 'verified': True}
 
 
 def catalogue():
-    return [{'id': f'param:{kind}:50', 'label': f'Set {kind} to 50%',
-             'available': bool(shutil.which(tool)), 'requires': tool,
-             'group': group, 'description': f'Use an exact percentage ({minimum}–100).',
-             'examples': [f'set {kind} to 50 percent'], 'phraseCount': 0}
-            for kind, minimum, tool, group in [('volume', 0, 'wpctl', 'Audio'),
-                                               ('brightness', 1, 'omarchy', 'Display')]]
+    entries = []
+    for kind, minimum, tool, group in [('volume', 0, 'wpctl', 'Audio'),
+                                        ('brightness', 1, 'omarchy', 'Display')]:
+        available = bool(shutil.which(tool))
+        entries.append({'id': f'param:{kind}:50', 'label': f'Set {kind} to 50%',
+            'available': available, 'requires': tool,
+            'availabilityReason': '' if available else tool + ' is not installed.',
+            'sourceId': 'desktop.' + kind,
+            'sourceLabel': 'Volume' if kind == 'volume' else 'Screen brightness',
+            'operation': 'set', 'verification': 'state' if kind == 'volume' else 'process',
+            'planSafe': True, 'group': group,
+            'description': f'Use an exact percentage ({minimum}–100).',
+            'examples': [f'set {kind} to 50 percent'], 'phraseCount': 0})
+    return entries
