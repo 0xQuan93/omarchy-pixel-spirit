@@ -10,6 +10,18 @@ A native Omarchy companion that grows with the things you make. It roams your de
 
 *Dream-room preview uses sample state; no personal notes or identity are included.*
 
+## Learns your phrases and explains Omarchy (2.1)
+
+Ask **“tell me about Omarchy”**, **“help me learn Omarchy”**, or **“Omarchy shortcuts”** for built-in guidance, clickable installed references, and the official manual. These answers work without a model; opening the online manual requires a connection.
+
+When an ordinary chat request reaches the local model, Wisp saves that exact request in your private learned bank. Repeat it to reuse a **dated saved reply** without calling the model. A learned desktop command becomes a fresh **Run** proposal checked against the current capability. Authored commands and guides always take priority over learned interpretations.
+
+**Ask again** refreshes a reply; **Forget phrase** removes it. Say **“show learned phrases”** to inspect recent entries or **“forget all learned phrases”** to clear the bank. Failed, incomplete, or context-dependent requests retain a retry explanation, not a successful answer. Saved replies are snapshots: use Ask again for fresh facts or a changed conversation.
+
+The bank holds up to 512 requests, within 4 MiB, on this computer only. It preserves case, punctuation, and internal whitespace when matching; it does not guess new aliases from similar sentences. Clear chat clears recent conversation while keeping learned phrases. Internal room/name choices, background reflection, and private creative-generation workflows retain their own behavior. See [learning and resource details](docs/LEARNED-PHRASES.md).
+
+<p><img src="assets/omarchy-help.png" alt="Built-in Omarchy help with clickable local references" width="360"> <img src="assets/learned-reply.png" alt="Dated saved answer with Ask again and Forget phrase controls" width="360"></p>
+
 ## Wisp 2.0 — local tasks, clear results
 
 **2.0.1 maintenance:** clearer plan and voice transitions, stronger state recovery, bounded model-lock waits, corrected theme colors, and safer upgrades. See the [audit and validation record](docs/AUDIT-2026-09-16.md).
@@ -69,7 +81,7 @@ After the exact phrase and installed-target routes, a small intent parser combin
 
 If you say **“close it,”** Wisp asks which target and offers up to four numbered choices. Click one, type **“second one”** or **“2,”** or type its exact label to prepare the command. **“Cancel”** clears the choices. Choosing an option never executes it. The short follow-up uses only the current on-screen choices and clears when the interaction changes.
 
-Conflicting interpretations ask rather than pick by pattern order. Meaningful source, timing, amount, negation and playback-preservation constraints cannot be silently dropped. Missing tools get a local explanation. Broader conversation still uses the model. There is no automatic alias learning or transcript collection in this layer. See [intent routing](docs/INTENT-ROUTING.md) for extension contracts and tests.
+Conflicting interpretations ask rather than pick by pattern order. Meaningful source, timing, amount, negation and playback-preservation constraints cannot be silently dropped. Missing tools get a local explanation. Broader conversation still uses the model. This parser does not learn aliases. The separate learned bank reuses exact requests after model fallback; it never mines old transcripts or grants execution authority. See [intent routing](docs/INTENT-ROUTING.md) for extension contracts and tests.
 
 ## Local multi-step requests (1.6)
 
@@ -224,7 +236,7 @@ After upgrading an already-running development copy, run `omarchy restart shell`
 - **Evidence, not attribution:** file changes earn 1 XP, HEAD changes 3, upstream-ref changes 2. Opt-in creative-app presence earns up to 4/day; all sources share a 24/day cap. These observations can include pulls, checkouts, clones or collaborator work. Upstream changes do **not** prove a push. No background fetch occurs.
 - **Memory for chat:** bounded excerpts from optional `MEMORY.md`, `USER.md`, `Soul.md`, up to two filename-matched session notes, recent evolution metadata and up to three short room-note excerpts. These go only to local Ollama as fallible, untrusted context. The plugin never writes to the shared vault.
 - **Controls:** explicit proposals for opening browser/terminal/files, volume, brightness, media playback, workspace navigation and power profiles. A Run button executes fixed argument lists. No arbitrary model-generated shell commands, deletion, publishing, or message sending.
-- **Private state:** `~/.local/state/pixel-spirit/` (or XDG state root) holds identity, position, room, recent chat and evolution metadata. Chat Clear preserves identity/growth. Empty shelf deletes room notes. Notes are limited to 12 × 4096 characters. Temporary audio is removed after transcription. Private requests travel over stdin, not process arguments.
+- **Private state:** `~/.local/state/pixel-spirit/` (or XDG state root) holds identity, position, room, recent chat, learned phrases and evolution metadata. Chat Clear preserves identity/growth and learned phrases; Forget phrase removes a learned entry from both primary and recovery copies. Empty shelf deletes room notes. Notes are limited to 12 × 4096 characters. Temporary audio is removed after transcription. Private requests travel over stdin, not process arguments.
 - **Resources:** native rendering; short-lived Python helpers. AC motion ~30 Hz, battery ~10 Hz; sprite animation ~12.5 Hz, battery 4 Hz. Hidden animation stops. AI uses four threads on AC, two on battery/power-saver; keep-alive is two minutes AC and zero eco. Room AI chooses every three minutes AC / ten eco only while the room is open and otherwise idle. CPU inference can still take minutes and several GB of RAM. The dream room uses no AI inference.
 - **Displays:** roaming and interactive panels use the first display; the screensaver creates one fullscreen window per display. Physical multi-monitor behavior has not been tested on the author’s one-display setup.
 

@@ -44,7 +44,8 @@ PanelWindow {
                 Column {
                     id: guide; width: parent.width - 8; spacing: 16
                     Text { width: parent.width; text: panel.setup.text || "Everyday desktop help, right here."; textFormat: Text.PlainText; wrapMode: Text.Wrap; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.body }
-                    Text { width: parent.width; text: "Local commands work without AI. Try “change my theme”, “open files” or “turn the volume down”."; wrapMode: Text.Wrap; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; lineHeight: 1.2 }
+                    Text { width: parent.width; text: "Local commands work without AI. Try “change my theme”, “open files” or “tell me about Omarchy” for guides and local references."; wrapMode: Text.Wrap; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; lineHeight: 1.2 }
+                    Text { width: parent.width; text: "Chat requests answered by the local model are saved in your learned bank. Repeat a request to reuse its saved reply without AI. Ask again refreshes it; Forget phrase removes it. Learned commands still offer Run for review."; wrapMode: Text.Wrap; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; lineHeight: 1.2 }
                     Ui.BorderSurface {
                         width: parent.width; height: discovery.implicitHeight + 24
                         radius: Style.cornerRadius; color: Qt.alpha(Color.accent, 0.05)

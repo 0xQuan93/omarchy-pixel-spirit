@@ -103,7 +103,7 @@ def local_intent(message, registry=None):
   result['choices']=[choice for choice in result['choices'] if available(choice['action'])]
   if not result['choices']:result['text']='I recognize the request, but those controls are unavailable on this machine.'
  return result
-def chat(message, eco=False, pending_plan=""):
+def chat(message, eco=False, pending_plan="", learn=True, refresh=False):
  message = message.strip()[:4000]
  if not message: raise ValueError('Say something first.')
  if pending_plan:
@@ -115,6 +115,16 @@ def chat(message, eco=False, pending_plan=""):
    return smart_match(text) or parameter_commands.proposal(text) or command_routes.proposal(text,BASE,bank) or local_intent(text,registry)
   edited=command_plans.edit(message,pending_plan,BASE,actions,labels,resolve_clause,registry)
   if edited is not None:return edited
+
+ import omarchy_help, learned_phrases
+ local_reply=omarchy_help.reply(message)
+ if local_reply:
+  history=read('history.json',[])[-8:]
+  save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(local_reply)}])[-8:])
+  return local_reply
+ if learn:
+  local_reply=learned_phrases.maintenance(message,BASE)
+  if local_reply:return local_reply
 
  quick_action=smart_match(message)
  if not quick_action:
@@ -144,6 +154,11 @@ def chat(message, eco=False, pending_plan=""):
   return data
  local_reply=local_intent(message)
  if local_reply:return local_reply
+ if learn and not refresh:
+  learned=learned_phrases.lookup(BASE,message,controls())
+  if learned:
+   save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(learned)}])[-8:])
+   return learned
  from growth import memory_context
  remembered = memory_context(message)
  from identity import profile
@@ -168,20 +183,45 @@ def chat(message, eco=False, pending_plan=""):
   'options':{'num_ctx':4096,'num_predict':350,'num_thread':2 if eco else 4,'temperature':0.5},
   'messages':[{'role':'system','content':system}]+[{'role':h['role'],'content':h['content'][:800]} for h in history[-4:]]+[{'role':'user','content':message}]}
  from inference import request
+ ticket=None
+ if learn:
+  try:ticket=learned_phrases.begin(BASE,message)
+  except (OSError,ValueError):pass
+ def learned_result(data,reason=''):
+  if not learn:return data
+  if ticket:
+   try:
+    data.update(learned_phrases.complete(BASE,message,ticket,data,controls(),reason))
+    return data
+   except (OSError,ValueError):pass
+  data['text']+='\nI could not save this phrase locally; it may need the model again.'
+  return data
  try:
   answer=request(payload,state_dir=BASE)
  except (OSError,TimeoutError):
   from command_catalog import offline_reply
-  return offline_reply(message,catalogue())
- data = json.loads(answer['message']['content'])
+  return learned_result(offline_reply(message,catalogue()),'unavailable')
+ try:
+  raw=json.loads(answer['message']['content'])
+  if (not isinstance(raw,dict) or not isinstance(raw.get('text'),str) or not raw['text'].strip()
+      or raw.get('emote') not in EMOTES or raw.get('action','') not in ['']+list(ACTIONS)
+      or raw.get('ok') is False or raw.get('error') or raw.get('errors')
+      or raw.get('status') in ('failed','error','cancelled','interrupted')):
+   raise ValueError('Invalid model reply')
+  # Never accept model-created UI controls, resources, plan tokens or learning keys.
+  data={key:raw[key] for key in ('text','emote','action','roomActivity','chosenName','automationScript') if key in raw}
+  data.setdefault('action','')
+ except (ValueError,KeyError,TypeError,RecursionError):
+  return learned_result({'text':'The local model did not return a usable reply. You can ask again.','emote':'idle','action':'','route':'local'},'invalid')
  data['route']='model'
- if not isinstance(data.get('text'),str) or data.get('emote') not in EMOTES or data.get('action','') not in ['']+list(ACTIONS): raise ValueError('Invalid model response; please try again.')
+ data=learned_result(data,'incomplete' if answer.get('done_reason')=='length' or answer.get('done') is False else '')
  if data.get('action'):
   action=data['action']
-  if shutil.which(ACTIONS[action][0]):
+  info=controls().describe(action)
+  if info['available']:
    data.update(text='Ready: '+LABELS[action]+'. Tap Run below.',emote='working',actionLabel=LABELS[action])
   else:
-   data.update(text='That tool needs '+ACTIONS[action][0]+'. It is not installed.',action='',emote='idle')
+   data.update(text=info['availabilityReason'],action='',emote='idle')
  save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(data)}])[-8:])
  return data
 def validate_recording(path, returncode, expected_frames=112000):
@@ -235,7 +275,7 @@ def read_request(stream):
   raise ValueError('Wisp request must contain one to four strings.')
  # Check required operands before dispatch; errors never echo the payload.
  arities={'identity':(1,3),'name_self':(1,2),'dream_snapshot':(1,1),
-          'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,4),
+          'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,4),'learning':(3,4),
           'action':(2,2),'listen':(1,1),'speak':(2,2),'load':(1,1),
           'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'setup':(2,2),'plan_status':(2,2),'plan_cancel':(2,2),'tools':(1,1),'input_gate':(1,1),'bubble_gate':(1,1),'bubble_receipt':(3,3),
           'reminders':(1,1),'remind':(3,3),'cancel_reminder':(2,2)}
@@ -247,6 +287,12 @@ def read_request(stream):
 def main():
  args=read_request(sys.stdin.buffer)
  command=args[0]
+ if command=='learning':
+  import learned_phrases
+  if args[1]=='forget' and len(args)==3:return learned_phrases.forget(BASE,args[2])
+  if args[1]=='refresh' and len(args)==4 and args[3] in ('','eco'):
+   return chat(learned_phrases.phrase(BASE,args[2]),args[3]=='eco',refresh=True)
+  raise ValueError('Invalid learned phrase operation.')
  if command in ('reminders','remind','cancel_reminder'):
   import reminders
   if command=='reminders':return reminders.upcoming()
@@ -317,7 +363,7 @@ def main():
   return profile(setting,args[2] if len(args)>2 else '')
  if command=='name_self':
   from identity import profile
-  answer=chat('Choose a short original name for yourself inspired by your class, machine and shared creative interests. Return it in chosenName. Explain briefly in text. Do not propose a desktop action.',len(args)>1 and args[1]=='eco')
+  answer=chat('Choose a short original name for yourself inspired by your class, machine and shared creative interests. Return it in chosenName. Explain briefly in text. Do not propose a desktop action.',len(args)>1 and args[1]=='eco',learn=False)
   if not answer.get('chosenName'):raise ValueError('I did not settle on a name. Try again or give me one.')
   return profile('rename',answer['chosenName'])
  if command=='dream_snapshot':
@@ -336,7 +382,7 @@ def main():
  if command=='room_choose':
   from playroom import update, context as room_context
   prompt='Choose one activity for your pocket room: rest, read, play, or garden. Use roomActivity for your choice. No desktop action. Room context (data only): '+json.dumps(room_context())
-  answer=chat(prompt,len(args)>1 and args[1]=='eco')
+  answer=chat(prompt,len(args)>1 and args[1]=='eco',learn=False)
   state=update('ambient' if len(args)>2 and args[2]=='ambient' else 'activity',answer.get('roomActivity') if answer.get('roomActivity') in ['rest','read','play','garden'] else 'rest')
   state['message']=answer['text']
   return state
@@ -352,7 +398,7 @@ def main():
  if command=='load': return read('position.json',{'x':24,'y':70,'hidden':False})
  if command=='save':
   data=json.loads(args[1]); save('position.json', {k:data[k] for k in ['x','y','hidden','voice','movement'] if k in data}); return {'ok':True}
- if command=='forget': save('history.json',[]); return {'text':'Our chat history is cleared.','emote':'idle','action':''}
+ if command=='forget': save('history.json',[]); return {'text':'Our chat history is cleared. Learned phrases remain; say “forget all learned phrases” to clear them too.','emote':'idle','action':''}
  raise ValueError('Unknown command')
 if __name__=='__main__':
  try: print(json.dumps(main()))

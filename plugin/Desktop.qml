@@ -164,7 +164,7 @@ Item {
         if(!steps.every(function(step){return step && typeof step.action==="string" && step.action.length>0 && step.action.length<=200 && typeof step.label==="string" && step.label.length>0 && step.label.length<=160}))return []
         return steps.map(function(step){return {action:step.action,label:step.label}})
     }
-    onReplyChanged: commandChoices=[]
+    onReplyChanged: {commandChoices=[];clearReplyDetails()}
     function clarificationChoices(data) {
         if(!Array.isArray(data))return []
         return data.slice(0,16).filter(function(c){return c && typeof c.action==="string" && c.action.length>0 && c.action.length<=200 && typeof c.label==="string" && c.label.length>0 && c.label.length<=160}).slice(0,4)
@@ -211,10 +211,57 @@ Item {
     function prepareCommandChoice(choice) {
         if(busy || !choice)return
         var action=choice.action,label=choice.label
-        commandChoices=[];clearPlanProgress();showPanel("chat");journalOpen=false;pending=action;pendingLabel=label
+        commandChoices=[];clearPlanProgress();clearReplyDetails();showPanel("chat");journalOpen=false;pending=action;pendingLabel=label
         responseSource="local";reply="Ready: "+label+". Tap Run below."
     }
     property string responseSource: ""
+    property var chatResources: []
+    property string learnedKey: ""
+    property string learnedKind: ""
+    property double learnedSavedAt: 0
+    function clearReplyDetails() {
+        chatResources=[];learnedKey="";learnedKind="";learnedSavedAt=0
+    }
+    function reviewedResource(resource) {
+        if(!resource || typeof resource.label!=="string" || !resource.label.trim() || resource.label.length>120 || typeof resource.url!=="string" || resource.url.length>2048)return false
+        if(/[\u0000-\u0020\u007f]/.test(resource.url))return false
+        if(resource.kind==="official")return /^https:\/\/omarchy\.org\/manual\/(?:[a-z0-9-]+\/)*$/.test(resource.url) || resource.url==="https://plugins.omarchy.org/"
+        if(resource.kind!=="local" || !/^file:\/\/\//.test(resource.url))return false
+        var path
+        try {path=decodeURIComponent(resource.url.slice(7))} catch(error){return false}
+        return path.charAt(0)==="/" && !/[\u0000-\u001f\u007f?#\\]/.test(path) && path.split("/").every(function(part){return part!=="." && part!==".."}) && /\/(?:shell\/(?:plugins\/)?README\.md|default\/hypr\/bindings\/utilities\.(?:lua|conf)|omarchy\/(?:shell\.json|current\/theme\/colors\.toml)|hypr\/bindings\.(?:lua|conf))$/.test(path)
+    }
+    function replyText(data) {
+        var text=data.error||data.text||""
+        // The CLI keeps readable links; chat presents the same links as buttons.
+        if(!data.error && data.route==="local" && data.helpTopic && Array.isArray(data.resources) && data.resources.length>0 && data.resources.length<=8 && data.resources.every(reviewedResource)){
+            var links="\n\n"+data.resources.map(function(resource){return resource.label+": "+resource.url}).join("\n")
+            if(text.endsWith(links))return text.slice(0,-links.length)
+        }
+        return text
+    }
+    function receiveReplyDetails(data) {
+        clearReplyDetails()
+        if(data.route==="local" && typeof data.helpTopic==="string" && data.helpTopic.length>0 && data.helpTopic.length<=80 && Array.isArray(data.resources))
+            chatResources=data.resources.slice(0,16).filter(reviewedResource).slice(0,8).map(function(resource){return {label:resource.label,url:resource.url,kind:resource.kind}})
+        if((["model","learned"].indexOf(data.route)>=0 || (data.route==="local" && data.learnedKind==="unresolved")) && typeof data.learnedKey==="string" && /^[0-9a-f]{64}$/.test(data.learnedKey) && ["answer","action","unresolved"].indexOf(data.learnedKind)>=0){
+            learnedKey=data.learnedKey;learnedKind=data.learnedKind
+            if(typeof data.savedAt==="number" && isFinite(data.savedAt) && data.savedAt>=0)learnedSavedAt=data.savedAt
+        }
+    }
+    function openChatResource(resource) {
+        if(busy || !chatResources.some(function(item){return resource && item.url===resource.url && item.kind===resource.kind && item.label===resource.label}) || !reviewedResource(resource))return
+        Qt.openUrlExternally(resource.url)
+    }
+    function learningRequest(operation) {
+        if(busy || !/^[0-9a-f]{64}$/.test(learnedKey) || ["refresh","forget"].indexOf(operation)<0)return
+        var key=learnedKey
+        if(pendingPlan)idlePlanCancelCall.run(["plan_cancel",pending])
+        commandChoices=[];pending="";pendingLabel="";planSteps=[];clearPlanProgress();clearReplyDetails();journalOpen=false
+        responseSource="";mood=operation==="refresh"?"thinking":"idle"
+        reply=operation==="refresh"?"Asking the local model again…":"Forgetting this saved phrase…"
+        brain.run(operation==="refresh"?["learning","refresh",key,eco?"eco":""]:["learning","forget",key])
+    }
     property var growth: ({stage:"Spark",level:0,trait:"Maker",xp:0,next:24,traits:{},journal:[]})
     property bool journalOpen: false
     property string growthError: ""
@@ -266,7 +313,7 @@ Item {
         var planContext=pendingPlan?pending:""
         var request=["chat",field.text,eco?"eco":"normal"]
         if(planContext)request.push(planContext)
-        commandChoices=[];planSteps=[];clearPlanProgress();journalOpen=false; pending=""; mood="thinking"; reply="Checking your request…";responseSource=""
+        commandChoices=[];planSteps=[];clearPlanProgress();clearReplyDetails();journalOpen=false; pending="";pendingLabel=""; mood="thinking"; reply="Checking your request…";responseSource=""
         brain.run(request); field.text=""
     }
     IpcHandler {
@@ -288,7 +335,7 @@ Item {
         function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
         function journal(): void {root.showPanel("chat");root.journalOpen=true;growthCall.run(["growth"])}
-        function status(): string { return JSON.stringify({responseSource:root.responseSource,pending:root.pending,pendingLabel:root.pendingLabel,choiceCount:root.commandChoices.length,planStepCount:root.displayedPlanSteps.length,planStatus:root.planProgress.status||"",setup:root.setupOpen,hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
+        function status(): string { return JSON.stringify({responseSource:root.responseSource,resourceCount:root.chatResources.length,learnedKind:root.learnedKind,pending:root.pending,pendingLabel:root.pendingLabel,choiceCount:root.commandChoices.length,planStepCount:root.displayedPlanSteps.length,planStatus:root.planProgress.status||"",setup:root.setupOpen,hidden:root.hidden,mood:root.mood,eco:root.eco,busy:root.busy,movement:root.movement,room:root.roomOpen,ready:root.stateReady,error:root.restoreError,stage:root.stateReady?root.growth.stage:null,trait:root.stateReady?root.growth.trait:null,xp:root.stateReady?root.growth.xp:null,bond:root.stateReady?root.roomData.bond:null,awareness:root.awareness.settings.enabled,ambientBusy:reflection.busy,panel:root.opened?"chat":root.roomOpen?"room":root.identityOpen?"self":root.remindersOpen?"reminders":root.awarenessOpen?senses.page:"",bubble:root.asideVisible,bubbleSource:root.asideSource,bubbleReason:root.bubbleReason,bubbleAcknowledged:root.asideAcknowledged,sampled:root.awareness.sampled||0,inputs:{enabled:inputs.enabled,allowed:inputs.allowed,focused:inputs.focused,mouse:inputs.mouseGestures,activity:inputs.activityResponses,reaction:root.inputMood,reason:inputs.summary}}) }
     }
     Timer {interval:500;running:!root.hidden;repeat:true;onTriggered:root.motionClock=Date.now()}
     Timer {id:patTimer;interval:400;onTriggered:{root.pats=0;root.toggle()}}
@@ -422,7 +469,7 @@ Item {
     }
     Timer {interval:10000;running:!root.stateReady && !loader.busy;repeat:true;onTriggered:loader.run(["restore"])}
     Timer {id:reaction;interval:15000;onTriggered:if(!root.busy)root.mood="idle"}
-    Call { id: brain; onReceived: function(d) { root.clearPlanProgress();root.reply=d.error||d.text; root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.planSteps=!d.error?root.previewPlanSteps(root.pending,d.steps):[];root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
+    Call { id: brain; onReceived: function(d) { root.clearPlanProgress();root.reply=root.replyText(d); root.mood=d.emote||"idle"; root.pending=d.action||"";root.pendingLabel=d.actionLabel||"Run command";root.planSteps=!d.error?root.previewPlanSteps(root.pending,d.steps):[];root.commandChoices=(!d.error && !root.pending)?root.clarificationChoices(d.choices):[];root.responseSource=d.route||"model";root.receiveReplyDetails(d);reaction.restart(); if(d.reminderDraft){root.reminderDraft=d.reminderDraft;root.reminderDetail="Review the details, then set your reminder.";root.showPanel("reminders");} if(root.voice && !d.error) speaker.run(["speak",d.text]) } }
     Call { id: actor; onReceived: function(d) { var receiptMood=root.actionReceiptMood(d,!!root.activePlanToken);if(root.activePlanToken){root.planFinished=true;root.planProgress=Object.assign({},root.planProgress,{status:["cancelled","interrupted"].indexOf(d.status)>=0?d.status:(d.error||d.ok===false?"failed":"completed"),text:d.error||d.text});root.planFinalReadNeeded=true;root.readPlanProgress()}root.reply=d.error||d.text; root.mood=receiptMood; if(!d.error || root.activePlanToken){root.pending="";root.pendingLabel=""};root.responseSource="local";reaction.restart() } }
     Timer { interval:1000; running:listener.busy; repeat:true; onTriggered: { if(root.micSeconds>0)root.micSeconds--; if(root.micSeconds===0)root.voiceReply("Transcribing your recording locally…") } }
     Call { id: listener; onReceived: function(d) { root.voiceReply(d.error||d.text); root.mood=d.emote||"idle"; if(d.transcript) {field.text=d.transcript; field.forceActiveFocus()} } }
@@ -535,13 +582,66 @@ Item {
                     Action {text:"Timers / Reminders";onClicked:root.showPanel("reminders")}
                     Action {text:"Growth";onClicked:{root.journalOpen=true;root.moreOpen=false;growthCall.run(["growth"])}}
                     Action {text:root.voice?"Voice on":"Voice off";selected:root.voice;onClicked:{root.voice=!root.voice;root.moreOpen=false;root.persist()}}
-                    Action {text:"Clear chat";enabled:!root.busy;onClicked:{root.pending="";root.journalOpen=false;root.moreOpen=false;brain.run(["forget"])}}
+                    Action {text:"Clear chat";enabled:!root.busy;onClicked:{root.pending="";root.pendingLabel="";root.clearPlanProgress();root.clearReplyDetails();root.journalOpen=false;root.moreOpen=false;brain.run(["forget"])}}
                     Action {text:"Hide";onClicked:{root.showPanel("");root.hidden=true;root.persist()}}
                 }
                 Flickable {
                     width:parent.width;height:root.journalOpen?180:(root.commandChoices.length>0 || root.displayedPlanSteps.length>0)?Math.min(130,Math.max(44,answer.implicitHeight)):130;contentHeight:answer.implicitHeight;clip:true
                     boundsBehavior:Flickable.StopAtBounds;Controls.ScrollBar.vertical:Controls.ScrollBar {}
                     Text {id:answer;width:parent.width-8;text:!root.stateReady?(root.restoreError||"Restoring your saved companion…"):root.journalOpen?(root.growthError||Object.keys(root.growth.traits).map(function(k){return k+" "+root.growth.traits[k]}).join(" · ")+"\n\n"+root.growth.journal.map(function(e){return (e.xp?"+"+e.xp+" XP · ":"")+e.text}).join("\n\n")+(root.growth.limited?"\n\nSampled activity: scan budget reached.":"")):root.reply;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
+                }
+                Column {
+                    visible:root.chatResources.length>0 && !root.journalOpen
+                    width:parent.width;spacing:6
+                    Text {text:"Omarchy resources";color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.caption}
+                    Flickable {
+                        width:parent.width;height:Math.min(resourceList.implicitHeight,104)
+                        contentHeight:resourceList.implicitHeight;clip:true
+                        boundsBehavior:Flickable.StopAtBounds
+                        Controls.ScrollBar.vertical:Controls.ScrollBar {}
+                        Column {
+                            id:resourceList;width:parent.width-8;spacing:6
+                            Repeater {
+                                model:root.chatResources
+                                Controls.Button {
+                                    id:resourceButton
+                                    required property var modelData
+                                    width:resourceList.width;padding:8
+                                    implicitHeight:resourceText.implicitHeight+16
+                                    text:modelData.label+(modelData.kind==="local"?" · On this computer":" · Official manual")
+                                    enabled:!root.busy;focusPolicy:Qt.TabFocus
+                                    Accessible.name:text
+                                    onClicked:root.openChatResource(modelData)
+                                    background:Ui.BorderSurface {
+                                        radius:Style.cornerRadius
+                                        color:Qt.alpha(Color.accent,resourceButton.hovered||resourceButton.activeFocus?0.14:0.05)
+                                        borderSpec:Border.controlSpec(resourceButton.activeFocus?"focus":resourceButton.hovered?"hover-cursor":"normal",Color.foreground,Color.accent)
+                                    }
+                                    contentItem:Text {
+                                        id:resourceText;text:resourceButton.text;textFormat:Text.PlainText
+                                        wrapMode:Text.Wrap;color:Color.foreground
+                                        font.family:Style.font.family;font.pixelSize:Style.font.bodySmall
+                                    }
+                                    onActiveFocusChanged:if(activeFocus)resourceList.parent.contentY=Math.min(Math.max(0,y+height-resourceList.parent.height),Math.max(0,resourceList.implicitHeight-resourceList.parent.height))
+                                }
+                            }
+                        }
+                    }
+                }
+                Column {
+                    visible:!!root.learnedKey && !root.journalOpen
+                    width:parent.width;spacing:6
+                    Text {
+                        width:parent.width
+                        text:root.learnedKind==="unresolved"?"Saved request · retry available":root.responseSource==="learned"?"Using your learned bank":"Saved for next time"
+                        wrapMode:Text.Wrap;color:Color.foreground;opacity:0.65
+                        font.family:Style.font.family;font.pixelSize:Style.font.caption
+                    }
+                    Flow {
+                        width:parent.width;spacing:6
+                        Action {text:"Ask again";tooltipText:"Ask the local model for a fresh reply";enabled:!root.busy;onClicked:root.learningRequest("refresh")}
+                        Action {text:"Forget phrase";tooltipText:"Remove this phrase from your personal bank";enabled:!root.busy;onClicked:root.learningRequest("forget")}
+                    }
                 }
                 Column {
                     visible:root.commandChoices.length>0 && !root.journalOpen
@@ -629,7 +729,7 @@ Item {
                 Row {spacing:6
                     Action {text:"Send";enabled:!root.busy;onClicked:root.send()}
                     Action {text:listener.busy?(root.micSeconds>0?"Mic · "+root.micSeconds+"s":"Decoding…"):"Mic";tooltipText:"Record seven seconds of speech";enabled:!root.busy;onClicked:{root.micSeconds=7;root.mood="reading";root.voiceReply("Listening now · speak for up to 7 seconds…");listener.run(["listen"])}}
-                    Text {text:root.busy?"On device":root.responseSource==="local"?"No AI needed":root.responseSource==="model"?"Local AI":root.eco?"Battery care":"On device";color:Color.foreground;opacity:0.45;font.family:Style.font.family;font.pixelSize:Style.font.caption;anchors.verticalCenter:parent.verticalCenter}
+                    Text {text:root.busy?"On device":root.responseSource==="local"?"No AI needed":root.responseSource==="model"?"Local AI":root.responseSource==="learned"?"Saved locally":root.eco?"Battery care":"On device";color:Color.foreground;opacity:0.45;font.family:Style.font.family;font.pixelSize:Style.font.caption;anchors.verticalCenter:parent.verticalCenter}
                 }
             }
         }
