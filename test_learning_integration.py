@@ -14,7 +14,7 @@ import learned_phrases as learned
 
 
 def answer(text='Windows tile to share the screen.',action='',**extra):
-    return {'message':{'content':json.dumps(dict(text=text,action=action,emote='reading',**extra))},'done_reason':'stop'}
+    return {'message':{'content':json.dumps(dict(text=text,action=action,emote='reading',**extra))},'done':True,'done_reason':'stop'}
 
 
 class LearningIntegration(unittest.TestCase):
@@ -93,6 +93,19 @@ class LearningIntegration(unittest.TestCase):
             self.assertEqual(first['learnedKind'],'unresolved');self.assertEqual(second['learnedKind'],'unresolved')
             self.assertEqual(second['action'],'');self.assertEqual(self.model.call_count,1)
             self.assertIn('Ask again',second['text'])
+
+    def test_incomplete_reply_cannot_offer_action_or_change_room(self):
+        for index,model_reply in enumerate((dict(answer(action='mute',roomActivity='read'),done=False),
+                                             dict(answer(action='mute',roomActivity='read'),done_reason='length'),
+                                             {key:value for key,value in answer(action='mute',roomActivity='read').items() if key!='done'})):
+            with self.subTest(index=index):
+                self.model.return_value=model_reply
+                result=brain.chat(self.message+' incomplete '+str(index),learn=False)
+                self.assertEqual(result['action'],'')
+                self.assertNotIn('roomActivity',result)
+                self.assertNotIn('actionLabel',result)
+                self.assertEqual(result['route'],'local')
+                self.effects.assert_not_called()
 
     def test_authored_route_overrides_old_learned_interpretation(self):
         ticket=learned.begin(self.base,'open browser')

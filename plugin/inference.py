@@ -7,6 +7,11 @@ import urllib.request
 from growth import STATE
 
 
+def complete(answer):
+    """Only a finished model response may produce chat effects."""
+    return isinstance(answer, dict) and answer.get('done') is True and answer.get('done_reason') in (None, 'stop')
+
+
 def request(payload, timeout=150, background=False, state_dir=None):
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError('Inference timeout must be a finite positive number.')

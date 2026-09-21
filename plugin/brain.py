@@ -182,7 +182,7 @@ def chat(message, eco=False, pending_plan="", learn=True, refresh=False):
  payload = {'model':os.environ.get('PIXEL_SPIRIT_MODEL',companion['model']),'stream':False,'think':False,'format':schema,'keep_alive':0 if eco else '2m',
   'options':{'num_ctx':4096,'num_predict':350,'num_thread':2 if eco else 4,'temperature':0.5},
   'messages':[{'role':'system','content':system}]+[{'role':h['role'],'content':h['content'][:800]} for h in history[-4:]]+[{'role':'user','content':message}]}
- from inference import request
+ from inference import complete, request
  ticket=None
  if learn:
   try:ticket=learned_phrases.begin(BASE,message)
@@ -201,6 +201,9 @@ def chat(message, eco=False, pending_plan="", learn=True, refresh=False):
  except (OSError,TimeoutError):
   from command_catalog import offline_reply
   return learned_result(offline_reply(message,catalogue()),'unavailable')
+ if not complete(answer):
+  return learned_result({'text':'The local model stopped before finishing. Please ask again.',
+                         'emote':'idle','action':'','route':'local'},'incomplete')
  try:
   raw=json.loads(answer['message']['content'])
   if (not isinstance(raw,dict) or not isinstance(raw.get('text'),str) or not raw['text'].strip()
@@ -214,7 +217,7 @@ def chat(message, eco=False, pending_plan="", learn=True, refresh=False):
  except (ValueError,KeyError,TypeError,RecursionError):
   return learned_result({'text':'The local model did not return a usable reply. You can ask again.','emote':'idle','action':'','route':'local'},'invalid')
  data['route']='model'
- data=learned_result(data,'incomplete' if answer.get('done_reason')=='length' or answer.get('done') is False else '')
+ data=learned_result(data)
  if data.get('action'):
   action=data['action']
   info=controls().describe(action)

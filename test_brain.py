@@ -17,7 +17,7 @@ class BrokerTests(unittest.TestCase):
   with patch.object(b,'run',side_effect=RuntimeError('failed')), patch.object(b.shutil,'which',return_value='/test/tool'):
    with self.assertRaises(RuntimeError):b.execute('volume_down')
  def test_chat_is_proposal_and_battery_policy(self):
-  response={'message':{'content':json.dumps({'text':'I can mute it.','emote':'working','action':'mute'})}}
+  response={'message':{'content':json.dumps({'text':'I can mute it.','emote':'working','action':'mute'})},'done':True,'done_reason':'stop'}
   with tempfile.TemporaryDirectory() as t, patch.object(b,'BASE',Path(t)), patch.object(b,'context',return_value={}), patch('identity.profile',return_value={'name':'Test','model':'qwen3.5:4b'}), patch.object(b.urllib.request,'urlopen') as url, patch.object(b.shutil,'which',return_value='/test/tool'):
    url.return_value.__enter__.return_value.read.return_value=json.dumps(response).encode()
    with patch.object(b,'execute') as execute:
