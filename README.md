@@ -170,7 +170,7 @@ omarchy pkg add espeak-ng whisper-cpp
 python3 ~/.config/omarchy/plugins/oxquan.pixel-spirit/tools/fetch_voice_model.py
 ```
 
-The downloader fetches the pinned ~75 MiB English Whisper tiny model to `~/.local/share/pixel-spirit/ggml-tiny.en.bin` and verifies its SHA-256. It does not bundle the model into the plugin.
+The downloader fetches the pinned 77,704,715-byte (~74.1 MiB) English Whisper tiny model to `~/.local/share/pixel-spirit/ggml-tiny.en.bin` and verifies its SHA-256. Its 80 MiB download limit rejects an oversized `Content-Length` or streamed response and removes the temporary file. It does not bundle the model into the plugin.
 
 **Mic · 7s** records, counts down, transcribes locally, and puts text in the input for review. Press Send afterward. **Voice on** enables eSpeak NG replies. No passive microphone listening. Recognition quality depends on the microphone and tiny English model.
 
