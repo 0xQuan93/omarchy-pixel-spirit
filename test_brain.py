@@ -1,4 +1,4 @@
-import importlib.util,json,tempfile,unittest,struct,wave
+import importlib.util,io,json,tempfile,unittest,struct,wave
 from pathlib import Path
 from unittest.mock import patch
 import sys
@@ -19,7 +19,7 @@ class BrokerTests(unittest.TestCase):
  def test_chat_is_proposal_and_battery_policy(self):
   response={'message':{'content':json.dumps({'text':'I can mute it.','emote':'working','action':'mute'})},'done':True,'done_reason':'stop'}
   with tempfile.TemporaryDirectory() as t, patch.object(b,'BASE',Path(t)), patch.object(b,'context',return_value={}), patch('identity.profile',return_value={'name':'Test','model':'qwen3.5:4b'}), patch.object(b.urllib.request,'urlopen') as url, patch.object(b.shutil,'which',return_value='/test/tool'):
-   url.return_value.__enter__.return_value.read.return_value=json.dumps(response).encode()
+   url.return_value.__enter__.return_value=io.BytesIO(json.dumps(response).encode())
    with patch.object(b,'execute') as execute:
     result=b.chat('Would you help silence this machine?',True); execute.assert_not_called()
    payload=json.loads(url.call_args.args[0].data)

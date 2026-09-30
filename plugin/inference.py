@@ -6,6 +6,9 @@ import time
 import urllib.request
 from growth import STATE
 
+MAX_RESPONSE_BYTES = 1024 * 1024
+READ_CHUNK_BYTES = 64 * 1024
+
 
 def complete(answer):
     """Only a finished model response may produce chat effects."""
@@ -37,4 +40,18 @@ def request(payload, timeout=150, background=False, state_dir=None):
                                      data=json.dumps(payload).encode(),
                                      headers={'Content-Type': 'application/json'})
         with urllib.request.urlopen(req, timeout=remaining) as response:
-            return json.load(response)
+            content_length = getattr(response, 'headers', {}).get('Content-Length')
+            if content_length is not None:
+                try:
+                    declared_size = int(content_length)
+                except ValueError as exc:
+                    raise OSError('Invalid local model Content-Length') from exc
+                if declared_size < 0 or declared_size > MAX_RESPONSE_BYTES:
+                    raise OSError('Local model Content-Length exceeds the response limit')
+
+            body = bytearray()
+            while chunk := response.read(min(READ_CHUNK_BYTES, MAX_RESPONSE_BYTES - len(body) + 1)):
+                body.extend(chunk)
+                if len(body) > MAX_RESPONSE_BYTES:
+                    raise OSError('Local model response exceeds the size limit')
+            return json.loads(body)
