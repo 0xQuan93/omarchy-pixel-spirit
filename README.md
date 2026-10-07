@@ -40,6 +40,8 @@ During execution, each row shows its progress. Accepted launches remain **Reques
 
 See the [capability and adapter contract](docs/CAPABILITIES.md) for supported extensions, evidence levels, cancellation, and portability limits.
 
+The [Wisp roadmap](docs/ROADMAP.md) sets out proposed upgrades for readability, trustworthy machine state, onboarding, portability, and Omarchy integrations.
+
 ## Meet your familiar
 
 - **Four evolution classes, sixteen silhouettes:** Forgewright, Prismweaver, Resonant, Lorekeeper.
