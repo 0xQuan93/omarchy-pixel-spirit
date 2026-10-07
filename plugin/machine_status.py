@@ -7,10 +7,12 @@ command arguments, model call, or saved machine snapshot is involved.
 from pathlib import Path
 import re
 import subprocess
+import time
 
 
 POWER_SUPPLIES = Path('/sys/class/power_supply')
 MAX_SUPPLIES = 32
+EVIDENCE_TTL_MS = 5000
 
 _QUESTIONS = (
     ('volume', (
@@ -207,9 +209,21 @@ def reply(message):
     kind = question_kind(message)
     if kind is None:
         return None
+    unknown = False
+    source_id, source_label = {
+        'volume': ('desktop.audio-output', 'Audio output'),
+        'mute': ('desktop.audio-output', 'Audio output'),
+        'profile': ('desktop.power-profile', 'Power profile'),
+        'power_saver': ('desktop.power-profile', 'Power profile'),
+        'battery': ('desktop.battery', 'Battery'),
+        'battery_overview': ('desktop.battery', 'Battery'),
+        'charging': ('desktop.battery', 'Battery'),
+        'external': ('desktop.external-power', 'External power'),
+    }[kind]
     if kind in {'volume', 'mute'}:
         reading = read_output_volume()
         if reading is None:
+            unknown = True
             text = 'I cannot read the current output volume or mute state right now.'
         elif kind == 'mute':
             text = 'The audio output is muted.' if reading[1] else 'The audio output is not muted.'
@@ -220,6 +234,7 @@ def reply(message):
     elif kind in {'profile', 'power_saver'}:
         profile = read_power_profile()
         if profile is None:
+            unknown = True
             text = 'I cannot read the current power profile right now.'
         elif kind == 'power_saver':
             text = 'Power saver is on.' if profile == 'power-saver' else f'Power saver is off; the current profile is {profile}.'
@@ -228,14 +243,24 @@ def reply(message):
     else:
         readings = read_power_supplies()
         if kind in {'battery', 'battery_overview'}:
+            unknown = readings['batteries'] is None or not readings['batteries'] or any(
+                battery['capacity'] is None for battery in readings['batteries'])
             text = _battery_text(readings['batteries'])
             if kind == 'battery_overview' and readings['batteries']:
                 text += ' This charge reading does not measure battery health.'
         elif kind == 'charging':
+            unknown = (readings['batteries'] is None or len(readings['batteries']) != 1
+                       or readings['batteries'][0]['status'] is None)
             text = _charging_text(readings['batteries'])
         elif readings['external'] is None:
+            unknown = True
             text = 'I cannot confirm whether external power is connected right now.'
         else:
             text = ('External power is connected.' if readings['external']
                     else 'External power is not connected.')
-    return {'text': text, 'emote': 'reading', 'action': '', 'route': 'local'}
+    observed = time.time_ns() // 1_000_000
+    return {'text': text, 'emote': 'reading', 'action': '', 'route': 'local',
+            'evidence': {'sourceId': source_id, 'sourceLabel': source_label,
+                         'observedAtMs': observed, 'expiresAtMs': observed + EVIDENCE_TTL_MS,
+                         'status': 'unknown' if unknown else 'verified', 'verification': 'state',
+                         'unknownReason': text if unknown else ''}}

@@ -2,6 +2,27 @@
 
 **Working proposal · October 7, 2026**
 
+## Implementation status
+
+The local 2.2 build now has the responsive chat, evidence card, three first-use
+paths, keyboard room controls, readiness checks, signal cards, selective transfer
+CLI, staged development installer, installed-command guide, reviewed routine
+shelf, and an opt-in quick path for a narrow exact-action set. The public test
+suite and plugin validator cover these code paths. The optional semantic module
+and adapter contract are available as reviewed building blocks; semantic routing
+is not enabled in chat: the [small local pilot](../evaluation/README.md) found
+five false action proposals among nine ambiguous or unsupported requests that
+the fixed routes missed, with 4.80-second median model time. This fails the
+false-proposal gate and is not a representative user study. Two independently
+maintained adapters have not been onboarded.
+
+The release gates below remain the product test plan. Human first-task studies,
+physical multi-monitor and scaling checks, older Omarchy hosts, battery/idle
+performance, and third-party adapter lifecycle tests need evidence before those
+milestones are called complete. The [2.2 capability contract](CAPABILITIES.md),
+[transfer guide](STATE-TRANSFER.md), and [adapter kit](ADAPTERS.md) describe the
+implemented boundaries.
+
 Wisp should be the familiar bridge between a person's request and Omarchy's real controls. A new user can learn one useful action and see what happened. An experienced user can combine trusted controls and understand the current machine without leaving their flow. The character and room give that utility a recognizable, lasting presence. Every claim about the machine should come from a named, fresh observation or a clearly labeled action receipt.
 
 This roadmap builds on Wisp's existing local command bank, reviewed Run actions, four-step plans, native help, optional local conversation, persistent identity, room, and quiet awareness. The current [capability contract](CAPABILITIES.md) already separates a completed process, an accepted request, and verified state. The next work should make that distinction useful throughout the interface.
@@ -49,7 +70,7 @@ Make each opt-in signal inspectable in Settings: what it reads, why, its last tr
 
 Current transfer requires copying the whole state directory while Wisp is stopped ([README](../README.md#persistence-and-recovery)). Add a versioned export with a preview of included identity, growth, room, settings, chat, and notes. Make chat and notes separately selectable, with a minimal identity-only default. Import validates into a temporary location, previews conflicts, then switches atomically while retaining a rollback copy. Hardware and source-specific bindings are revalidated on the destination.
 
-Stage and validate a complete plugin generation before replacing the installed one. The current [development installer](../install.py) replaces individual files, which can briefly mix versions; personal overlays need the same generation check. Record a compatibility matrix for supported Omarchy, Quickshell, Python, display scale, and optional packages. Replace assumptions such as first-screen placement and exact upstream launcher text with feature probes or a clear unavailable explanation.
+Stage and validate a complete plugin generation before replacing the installed one. The [development installer](../install.py) now stages a generation and retains rollback; the composed local installer does the same for personal overlays. Record a compatibility matrix for supported Omarchy, Quickshell, Python, display scale, and optional packages. Replace assumptions such as first-screen placement and exact upstream launcher text with feature probes or a clear unavailable explanation.
 
 ### 4. A useful guide and a responsible speed path
 
@@ -70,4 +91,10 @@ Collect wording misses through voluntary, local feedback and a small regression 
 - **Continuity:** export/import round trips, upgrade rollback, preservation of identity and earned history, and clean removal of an adapter.
 - **Access and performance:** keyboard completion, panel clipping and contrast across light/dark themes and display scales, reduced-motion equivalence, idle CPU, battery cost, cold/warm response time, and shell recovery after a helper failure.
 
-The first build slice is the responsive chat and typed receipt together. It gives every later feature a readable place to explain what Wisp knows, what it proposed, and what the machine actually did.
+The responsive chat and typed receipt are the first implemented slice. The next
+work is measured use on real displays and repeat tasks, then in-panel transfer
+guidance and independently maintained source adapters. Semantic routing remains
+an evaluation-only prototype until a larger real-request study clears its
+false-proposal and latency gates. A future transfer UI should make conflict
+preview and stopped-state import approachable without weakening the file
+validation and rollback contract.

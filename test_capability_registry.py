@@ -51,6 +51,26 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertFalse(result['available'])
         self.assertNotIn('private detail', result['availabilityReason'])
 
+    def test_typed_readiness_preserves_legacy_availability_and_rejects_false_claims(self):
+        registry = self.registry(availability=lambda action: {
+            'installed': True, 'connected': False, 'actionable': False,
+            'reason': 'No player is open.'})
+        result = registry.describe('open')
+        self.assertFalse(result['available'])
+        self.assertEqual(result['availabilityReason'], 'No player is open.')
+        self.assertEqual(result['readiness']['connected'], False)
+        self.assertFalse(result['readiness']['actionable'])
+        self.assertGreater(result['readiness']['expiresAtMs'], result['readiness']['checkedAtMs'])
+        for invalid in ({'installed': False, 'connected': True, 'actionable': True},
+                        {'installed': True, 'connected': False, 'actionable': True},
+                        {'installed': True, 'connected': 'yes', 'actionable': True},
+                        {'installed': True, 'connected': None, 'actionable': 1}):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(self.registry(availability=lambda action: invalid).describe('open')['available'])
+        legacy = self.registry(availability=lambda action: {'available': True, 'reason': ''}).describe('open')
+        self.assertTrue(legacy['readiness']['installed'])
+        self.assertIsNone(legacy['readiness']['connected'])
+
     def test_strict_metadata_and_fixed_action_validation(self):
         for data in ({'missing': {}}, {'open': {'argv': ['bad']}},
                      {'open': {'module': 'untrusted'}}, {'open': {'planSafe': 1}},
@@ -168,6 +188,14 @@ class CapabilityRegistryTests(unittest.TestCase):
         receipt = state.receipt('open', {'text': 'State confirmed.', 'action': '', 'verified': True})
         self.assertTrue(receipt['ok'])
         self.assertEqual(receipt['status'], 'verified')
+        self.assertEqual(receipt['evidence']['status'], 'verified')
+        self.assertEqual(receipt['evidence']['verification'], 'state')
+        self.assertGreater(receipt['evidence']['expiresAtMs'], receipt['evidence']['observedAtMs'])
+        forged = registry.receipt('open', {'text': 'Accepted.', 'action': '',
+                                           'evidence': {'status': 'verified', 'sourceId': 'forged'}})
+        self.assertEqual(forged['evidence']['status'], 'accepted')
+        self.assertEqual(forged['evidence']['sourceId'], 'player')
+        self.assertIsNone(forged['evidence']['expiresAtMs'])
 
     def test_malformed_or_failed_receipts_cannot_report_success(self):
         registry = self.registry()

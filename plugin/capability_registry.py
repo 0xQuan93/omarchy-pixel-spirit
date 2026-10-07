@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import shutil
+import time
 from collections.abc import Mapping
 
 _FIELDS = frozenset({'sourceId', 'sourceLabel', 'operation', 'planSafe', 'verification'})
@@ -17,6 +18,8 @@ _SOURCE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.:'-]{0,119}")
 _OPERATION = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9_:-]{0,119}')
 _ALIAS = re.compile(r"[a-z][a-z0-9]*(?:[ '-][a-z0-9]+)*")
 _TARGET_FIELDS = frozenset({'label', 'aliases', 'verbs', 'hide_without_stopping'})
+READINESS_TTL_MS = 2000
+STATE_EVIDENCE_TTL_MS = 5000
 
 
 def _label(value, limit=160):
@@ -117,25 +120,42 @@ class Registry:
             raise ValueError('Unknown fixed capability.')
 
     def _availability_result(self, action):
+        checked = time.time_ns() // 1_000_000
+        fallback = {'installed': False, 'connected': None, 'actionable': False,
+                    'reason': 'Availability could not be checked.',
+                    'checkedAtMs': checked, 'expiresAtMs': checked + READINESS_TTL_MS}
         try:
             value = self._availability(action) if self._availability is not None else bool(shutil.which(self._actions[action][0]))
             if type(value) is bool:
-                return value, '' if value else (self._actions[action][0]+' is not installed.' if self._availability is None else 'Required control is unavailable.')
+                reason = '' if value else (self._actions[action][0]+' is not installed.' if self._availability is None else 'Required control is unavailable.')
+                return dict(fallback, installed=value, actionable=value, reason=reason)
             if isinstance(value, dict) and type(value.get('available')) is bool:
                 reason = value.get('reason', '')
                 if not isinstance(reason, str):
-                    return False, 'Availability check returned an invalid result.'
+                    return dict(fallback, reason='Availability check returned an invalid result.')
                 available = value['available']
-                return available, reason if reason else ('' if available else 'Required control is unavailable.')
+                return dict(fallback, installed=available, actionable=available,
+                            reason=reason if reason else ('' if available else 'Required control is unavailable.'))
+            if isinstance(value, dict) and all(key in value for key in ('installed', 'connected', 'actionable')):
+                installed, connected, actionable = (value[key] for key in ('installed', 'connected', 'actionable'))
+                reason = value.get('reason', '')
+                if (type(installed) is not bool or connected is not None and type(connected) is not bool
+                        or type(actionable) is not bool or not isinstance(reason, str)
+                        or actionable and (not installed or connected is False)):
+                    return dict(fallback, reason='Availability check returned an invalid result.')
+                return dict(fallback, installed=installed, connected=connected, actionable=actionable,
+                            reason=reason if reason else ('' if actionable else 'Required control is unavailable.'))
         except Exception:
-            return False, 'Availability could not be checked.'
-        return False, 'Availability check returned an invalid result.'
+            return fallback
+        return dict(fallback, reason='Availability check returned an invalid result.')
 
     def describe(self, action):
         self._require(action)
-        available, reason = self._availability_result(action)
+        readiness = self._availability_result(action)
+        available = readiness['actionable']
         return dict(self._metadata[action], id=action, label=self._labels[action],
-                    available=available, availabilityReason=reason,
+                    available=available, availabilityReason='' if available else readiness['reason'],
+                    readiness=readiness,
                     requires=self._actions[action][0])
 
     def plan_allowed(self):
@@ -228,4 +248,12 @@ class Registry:
             payload['text'] = 'The control did not return a valid completion receipt.'
         payload.update(action='', route='local', sourceId=metadata['sourceId'],
                        verification=verification, status=status, ok=ok)
+        observed = time.time_ns() // 1_000_000
+        payload['evidence'] = {
+            'sourceId': metadata['sourceId'], 'sourceLabel': metadata['sourceLabel'],
+            'observedAtMs': observed,
+            'expiresAtMs': observed + STATE_EVIDENCE_TTL_MS if status == 'verified' else None,
+            'status': status, 'verification': verification,
+            'unknownReason': ('Requested state could not be confirmed.' if verification == 'state' else
+                              'Operation did not confirm completion.') if status == 'failed' else ''}
         return payload

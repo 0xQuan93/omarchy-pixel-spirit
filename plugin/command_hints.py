@@ -117,6 +117,8 @@ def choose(snapshot, recent=None):
             start = positions[last] + 1
             candidates = candidates[start:] + candidates[:start]
             break
+    from readiness import MEDIA_ACTIONS, MIC_ACTIONS, check
+    probes = {}
     for action, categories, example, text in candidates:
         if action in excluded or action not in ACTIONS or action not in LABELS:
             continue
@@ -124,6 +126,10 @@ def choose(snapshot, recent=None):
         # also supports personal overlays without changing routing priority.
         if match(example) != action or not shutil.which(ACTIONS[action][0]):
             continue
+        if action in MEDIA_ACTIONS | MIC_ACTIONS:
+            readiness = check(action, ACTIONS[action], probes)
+            if not readiness['actionable'] or readiness['connected'] is not True or not readiness['suggestable']:
+                continue
         return {'text': text, 'basis': category if categories else 'Omarchy command tip',
                 'kind': 'command-hint', 'action': action,
                 'actionLabel': LABELS[action], 'example': example}

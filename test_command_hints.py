@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent / 'plugin'))
 import command_hints as hints
+import readiness
 from capabilities import ACTIONS, LABELS
 from smart_commands import match
 
@@ -43,7 +44,11 @@ class CommandHintTests(unittest.TestCase):
             self.assertEqual(hints.choose({'category': 'Maker'}, [first] + [{}] * 12), first)
 
     def test_rotation_reaches_every_family_without_growing_history(self):
-        with patch.object(hints.shutil, 'which', return_value='/usr/bin/tool'):
+        playing = {'hasPlayer': True, 'playing': True, 'canGoNext': True,
+                   'canGoPrevious': True, 'canTogglePlaying': True}
+        with patch.object(hints.shutil, 'which', return_value='/usr/bin/tool'), \
+             patch.object(readiness, '_media_status', return_value=playing), \
+             patch.object(readiness, '_microphone_present', return_value=True):
             for category in (*hints.CATEGORIES, 'Other'):
                 expected = {h[0] for h in hints.HINTS if not h[1] or category in h[1]}
                 seen, recent = set(), []
@@ -52,6 +57,22 @@ class CommandHintTests(unittest.TestCase):
                     seen.add(result['action'])
                     recent = (recent + [result])[-hints.RECENT_LIMIT:]
                 self.assertEqual(seen, expected)
+
+    def test_stateful_tips_require_a_confirmed_source(self):
+        pause_hint = next(item for item in hints.HINTS if item[0] == 'pause_music')
+        with patch.object(hints, 'HINTS', (pause_hint,)), \
+             patch.object(hints.shutil, 'which', return_value='/usr/bin/tool'), \
+             patch.object(readiness, '_media_status', return_value={'hasPlayer': False, 'playing': False}):
+            self.assertIsNone(hints.choose({'category': 'Musician'}))
+        with patch.object(hints, 'HINTS', (pause_hint,)), \
+             patch.object(hints.shutil, 'which', return_value='/usr/bin/tool'), \
+             patch.object(readiness, '_media_status', return_value=None):
+            self.assertIsNone(hints.choose({'category': 'Musician'}))
+        mic_hint = next(item for item in hints.HINTS if item[0] == 'mic_mute')
+        with patch.object(hints, 'HINTS', (mic_hint,)), \
+             patch.object(hints.shutil, 'which', return_value='/usr/bin/tool'), \
+             patch.object(readiness, '_microphone_present', return_value=False):
+            self.assertIsNone(hints.choose({'category': 'Musician'}))
 
     def test_no_context_leak_or_invented_category(self):
         with patch.object(hints.shutil, 'which', return_value='/usr/bin/tool'):

@@ -33,6 +33,14 @@ FocusScope {
     function controlDetails(tool) {
         var lines = [];
         if (typeof tool.sourceLabel === "string" && tool.sourceLabel.length) lines.push("Uses " + tool.sourceLabel);
+        if (typeof tool.nativeMenu === "string" && tool.nativeMenu.length) lines.push("Omarchy menu: " + tool.nativeMenu);
+        if (typeof tool.nativeShortcut === "string" && tool.nativeShortcut.length) lines.push("Default shortcut: " + tool.nativeShortcut + " · check Super + K for your bindings.");
+        if (typeof tool.nativeRoute === "string" && tool.nativeRoute.length) lines.push("Installed command: " + tool.nativeRoute);
+        if (tool.readiness && typeof tool.readiness === "object") {
+            if (tool.readiness.connected === true) lines.push("Source was connected when listed; Run checks again.");
+            else if (tool.readiness.connected === false) lines.push("No connected source was found when listed.");
+            else if (tool.readiness.installed === true) lines.push("Source connection was unknown when listed; Run checks again.");
+        }
         var verification = {accepted: "Confirms the request was accepted.", state: "Checks that the change took effect.", process: "Reports whether the command finished."};
         if (Object.prototype.hasOwnProperty.call(verification, tool.verification)) lines.push(verification[tool.verification]);
         if (typeof tool.planSafe === "boolean") lines.push(tool.planSafe ? "Can be included in a reviewed plan." : "Use this command on its own.");
@@ -121,7 +129,7 @@ FocusScope {
                 id: availability
                 text: root.availableOnly ? "Ready only" : "All availability"
                 selected: root.availableOnly
-                tooltipText: "Filter to commands with their required tools installed"
+                tooltipText: "Filter to commands that can be prepared now"
                 onClicked: root.availableOnly = !root.availableOnly
             }
         }

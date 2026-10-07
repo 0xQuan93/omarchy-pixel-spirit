@@ -45,6 +45,7 @@ class SmartCommandTests(unittest.TestCase):
             'open a terminal': 'terminal', 'show my files': 'files',
             'open my browser': 'browser', 'open obsidian': 'notes',
             'pause this song': 'pause_music', 'resume playback': 'play_music',
+            "let's play some music": 'play_music',
             'skip this track': 'next_track', 'go back one track': 'previous_track',
             'make it louder': 'volume_up', 'turn the volume down': 'volume_down',
             'mute': 'mute', 'unmute the sound': 'unmute',

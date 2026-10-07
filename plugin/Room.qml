@@ -19,7 +19,7 @@ PanelWindow {
     signal closeRequested()
     anchors {right:true;bottom:true}
     margins {right:24;bottom:24}
-    implicitWidth:500;implicitHeight:Math.min(575,screen?screen.height-90:575)
+    implicitWidth:Math.max(260,Math.min(500,(screen?screen.width:1920)-32));implicitHeight:Math.min(575,screen?screen.height-80:575)
     color:"transparent";exclusionMode:ExclusionMode.Ignore
     WlrLayershell.namespace:"pixel-spirit-room";WlrLayershell.layer:WlrLayer.Overlay;WlrLayershell.keyboardFocus:WlrKeyboardFocus.OnDemand
     Ui.BorderSurface {
@@ -37,23 +37,28 @@ PanelWindow {
                 Column {
                     id:body;width:parent.width-8;spacing:12
                     RoomScene {
+                        id:roomScene
                         width:parent.width;height:width*360/640;profile:room.profile;growth:room.growth;roomState:room.roomState;family:room.family
-                        active:room.visible;eco:room.eco;interactive:true
+                        active:room.visible;eco:room.eco;interactive:!room.busy
                         accent:Color.accent;foreground:Color.popups.text;background:Color.popups.background
                         onCaughtFireflies:room.interact("catch","")
                         DropArea {anchors.fill:parent;onDropped:function(drop){if(drop.hasUrls)room.interact("note",drop.urls[0].toString());else if(drop.hasText)room.interact("note",drop.text);drop.acceptProposedAction()}}
                     }
+                    Text {width:parent.width;text:"Choose an activity";color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
                     Flow {width:parent.width;spacing:5
-                        Repeater {model:["rest","read","play","garden"];Action {required property string modelData;text:modelData;selected:room.roomState.activity===modelData;enabled:!room.busy;onClicked:room.interact("activity",modelData)}}
-                        Action {text:room.busy?"Thinking…":"You choose";enabled:!room.busy;onClicked:room.choose()}
+                        Repeater {model:["rest","read","play","garden"];Action {required property string modelData;text:modelData.charAt(0).toUpperCase()+modelData.slice(1);selected:room.roomState.activity===modelData;enabled:!room.busy;onClicked:room.interact("activity",modelData)}}
+                    }
+                    Flow {width:parent.width;spacing:5
+                        Action {text:room.busy?"Thinking…":"Let Wisp choose";enabled:!room.busy;onClicked:room.choose()}
+                        Action {text:"Catch fireflies · "+roomScene.caught+" of 3";tooltipText:"Collect three fireflies for a room discovery";enabled:!room.busy;onClicked:roomScene.catchFirefly()}
                     }
                     Text {width:parent.width;text:room.roomState.message;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body;lineHeight:1.2}
                     Disclosure {
                         width:parent.width;title:"Notes · "+room.roomState.notes.length
-                        Row {spacing:6
-                            Controls.TextField {id:note;width:330;placeholderText:"Leave a small note…";color:Color.foreground;selectByMouse:true;background:Ui.BorderSurface{color:Qt.alpha(Color.accent,0.05);borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)}
-                            onAccepted:{room.interact("note",text);text=""}}
-                            Action {text:"Save";enabled:!room.busy;onClicked:{room.interact("note",note.text);note.text=""}}
+                        Row {width:parent.width;spacing:6
+                            Controls.TextField {id:note;width:Math.max(120,parent.width-saveNote.implicitWidth-parent.spacing);placeholderText:"Leave a small note…";color:Color.foreground;selectByMouse:true;background:Ui.BorderSurface{color:Qt.alpha(Color.accent,0.05);borderSpec:Border.surfaceSpec("popup","border",Color.popups.border,1)}
+                            onAccepted:if(!room.busy && text.trim()){room.interact("note",text);text=""}}
+                            Action {id:saveNote;text:"Save";enabled:!room.busy && !!note.text.trim();onClicked:{room.interact("note",note.text);note.text=""}}
                         }
                         Repeater {model:room.roomState.notes.slice().reverse()
                             Text {required property var modelData;width:body.width;text:modelData.text;textFormat:Text.PlainText;wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}

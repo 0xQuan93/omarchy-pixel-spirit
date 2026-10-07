@@ -14,6 +14,11 @@ Item {
     onAccentChanged:waveform.requestPaint()
     property int caught: 0
     signal caughtFireflies()
+    function catchFirefly() {
+        if(!interactive)return
+        caught++
+        if(caught>=3){caught=0;caughtFireflies()}
+    }
     Item {
         width:640;height:360;scale:Math.min(scene.width/640,scene.height/360);transformOrigin:Item.TopLeft
         Rectangle {anchors.fill:parent;radius:12;color:scene.background;border.color:Qt.alpha(scene.accent,0.28)}
@@ -56,7 +61,7 @@ Item {
         Repeater {model:3
             Rectangle {required property int index;property int hop:0;x:260+(index*71+hop*37)%95;y:35+(index*31+hop*17)%112;width:18;height:18;radius:9;color:Qt.alpha(scene.accent,0.12);border.color:Qt.alpha(scene.accent,0.7)
                 Rectangle{anchors.centerIn:parent;width:4;height:4;rotation:45;color:scene.accent}
-                MouseArea{anchors.fill:parent;enabled:scene.interactive;cursorShape:Qt.PointingHandCursor;onClicked:{parent.hop++;scene.caught++;if(scene.caught>=3){scene.caught=0;scene.caughtFireflies()}}}
+                MouseArea{x:-8;y:-8;width:34;height:34;enabled:scene.interactive;cursorShape:Qt.PointingHandCursor;onClicked:{parent.hop++;scene.catchFirefly()}}
             }
         }
     }

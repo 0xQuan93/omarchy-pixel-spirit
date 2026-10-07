@@ -131,7 +131,8 @@ def reply(message):
     """Return a curated local answer, or None when the request is not covered."""
     topic = _topic(message)
     if topic is None:
-        return None
+        from native_guide import reply as native_reply
+        return native_reply(message)
     system, config = _roots()
     legacy = ((system / 'default/hypr/bindings/utilities.conf').is_file()
               and not (system / 'default/hypr/bindings/utilities.lua').is_file())

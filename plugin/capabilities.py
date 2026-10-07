@@ -37,7 +37,7 @@ LABELS = {
  'dnd_on':'Quiet notifications', 'dnd_off':'Resume notifications',
  'reminders':'Open timers and reminders',
 }
-def registry(availability_override=None, extensions=None):
+def registry(availability_override=None, extensions=None, probe_stateful=True):
  actions=dict(ACTIONS);labels=dict(LABELS);extra={}
  if extensions:
   new_actions,new_labels,extra=extensions
@@ -45,12 +45,21 @@ def registry(availability_override=None, extensions=None):
   actions.update(new_actions);labels.update(new_labels)
 
  from capability_specs import build
- return build(actions,labels,availability_override,extra)
+ if availability_override is None:
+  if probe_stateful:
+   from readiness import check
+   snapshots={}
+   availability=lambda action:check(action,actions[action],snapshots)
+  else:
+   availability=lambda action:bool(shutil.which(actions[action][0]))
+ else:
+  availability=availability_override
+ return build(actions,labels,availability,extra)
 
-def catalogue(state_dir=None, include_personal=False):
+def catalogue(state_dir=None, include_personal=False, probe_stateful=False):
  from smart_commands import PHRASES
  from command_catalog import decorate, personal_entries
- controls=registry()
+ controls=registry(probe_stateful=probe_stateful)
  entries=decorate([controls.describe(key) for key in ACTIONS],PHRASES)
  if include_personal:
   from parameter_commands import catalogue as percentages
@@ -58,7 +67,7 @@ def catalogue(state_dir=None, include_personal=False):
   bank=command_bank.scan(state_dir=state_dir)
   extras=percentages()+personal_entries(state_dir,bank)
   from plan_extensions import discover
-  expanded=registry(extensions=discover(state_dir,bank))
+  expanded=registry(extensions=discover(state_dir,bank),probe_stateful=probe_stateful)
   allowed=expanded.plan_allowed()
   for entry in extras:
    if entry['id'] in allowed:

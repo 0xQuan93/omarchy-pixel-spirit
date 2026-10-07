@@ -83,6 +83,7 @@ _PATTERNS = (
     ('close', re.compile(r'shut (.+) down'), False),
     ('pause', re.compile(r'put (.+) on pause'), False),
     ('increase', re.compile(r'(?:turn|bump|bring) (.+?) up' + _SMALL), False),
+    ('increase', re.compile(r'push (.+?) up' + _SMALL), False),
     ('decrease', re.compile(r'(?:turn|bring) (.+?) down' + _SMALL), False),
     ('enable', re.compile(r'(?:turn|switch) (.+?)(?: back)? on'), False),
     ('disable', re.compile(r'(?:turn|switch) (.+) off'), False),
@@ -179,6 +180,13 @@ def resolve(message, actions, labels, normalize, extra_targets=None):
     for _ in range(2):
         text = _LEADING.sub('', text, count=1)
     aliases, records = _catalogue(actions, labels, extra_targets)
+    if re.fullmatch(r'push up' + _SMALL, text):
+        if not _safe_words(text):
+            return None
+        choices = _choices((record['verbs']['increase'] for record in records
+                            if 'increase' in record['verbs']), labels)
+        return (_clarify('What should I increase? Choose a command to review.',
+                         choices, 'target-needed') if choices else None)
     parses = [(verb, pattern.fullmatch(text), preserving)
               for verb, pattern, preserving in _PATTERNS]
     parses = [(verb, found, preserving) for verb, found, preserving in parses if found]

@@ -34,7 +34,7 @@ _forms('reminders', ('check', 'view', 'show me'), ('my reminders', 'my timers', 
 
 _forms('pause_music', ('pause',), ('music', 'the music', 'my music', 'playback', 'the audio', 'the song', 'this song', 'the track'))
 _forms('play_music', ('resume', 'continue', 'unpause'), ('music', 'the music', 'my music', 'playback', 'the audio', 'the song', 'the track'))
-_add('play_music', 'play music', 'play the music', 'start the music again')
+_add('play_music', 'play music', 'play the music', 'play some music', 'start the music again')
 _add('play_pause', 'toggle playback', 'toggle the music', 'toggle media playback', 'play or pause the music')
 for _action, _direction in (('next_track', 'next'), ('previous_track', 'previous')):
     _add(_action, _direction + ' track', _direction + ' song')

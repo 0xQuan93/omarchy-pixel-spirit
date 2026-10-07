@@ -66,7 +66,8 @@ class IntentRouterTests(unittest.TestCase):
         self.assertEqual(result['choices'], [])
 
     def test_missing_object_and_known_unsupported_operation_clarify(self):
-        for message in ('close it', 'turn it off', 'hide that', 'open this one'):
+        for message in ('close it', 'turn it off', 'hide that', 'open this one',
+                        'push up!', 'push it up', 'push it up a notch'):
             with self.subTest(message=message):
                 result = self.resolve(message)
                 self.assertEqual(result['action'], '')
@@ -74,6 +75,10 @@ class IntentRouterTests(unittest.TestCase):
                 self.assertEqual(result['reason'], 'target-needed')
                 self.assertLessEqual(len(result['choices']), 4)
                 self.assertTrue(all(c['action'] in ACTIONS for c in result['choices']))
+        for message in ('push up!', 'push it up'):
+            choices = {choice['action'] for choice in self.resolve(message)['choices']}
+            self.assertTrue({'volume_up', 'brightness_up'} <= choices)
+        self.assertEqual(self.resolve('push the volume up')['action'], 'volume_up')
         result = self.resolve('stop the browser')
         self.assertEqual(result['action'], '')
         self.assertEqual(result['reason'], 'operation-unavailable')

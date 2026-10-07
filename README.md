@@ -10,6 +10,16 @@ A native Omarchy companion that grows with the things you make. It roams your de
 
 *Dream-room preview uses sample state; no personal notes or identity are included.*
 
+## Wisp 2.2 — know the machine, keep the familiar
+
+Chat now grows with the display, keeps its reading area together, and keeps the composer and **Run** controls visible. A result card says whether a command finished, a request was accepted, or a state was verified; current readings show their source and check time. The room has a keyboard firefly action, and **Getting started** offers three small paths through desktop help, Wisp's room, and privacy choices. Existing companions can open **More → What’s new** for an optional tour.
+
+**Commands** shows a known native Omarchy menu or default shortcut alongside Wisp's reviewed path. Media and microphone suggestions check whether a source is connected, and Run checks again. Installed controls that cannot report a source explain the uncertainty. Wisp still avoids claiming that a menu choice or asynchronous request completed downstream work.
+
+You can name a pending plan beside **Run plan** and find it later under **More → Routines**. A saved routine stores only registered action IDs and their reviewed fingerprints; reopening it creates a new, one-use plan with its own Run. Changed or removed controls invalidate the routine. **More → Quick actions** is an optional exact-request speed path for volume, speaker mute, and playback. It starts off, never applies to model interpretations or personal aliases, and still returns the real command receipt. Playback needs a confirmed controllable player for the quick path.
+
+**Settings → Signal sources** now shows what each opt-in source reads, why, when Wisp last sampled or delivered it, what remains stored, and its switch. The [local transfer tool](docs/STATE-TRANSFER.md) previews selective identity, growth, room, settings, and optional notes/chat export and import; its default export contains identity only. Development installs stage and validate a complete plugin generation, then retain the prior one for rollback. The [adapter kit](docs/ADAPTERS.md) defines a reviewed, versioned contract for source-specific controls and facts. The optional semantic proposal experiment remains isolated until it passes a real wording and false-proposal evaluation.
+
 ## Learns your phrases and explains Omarchy (2.1)
 
 Ask **“tell me about Omarchy”**, **“help me learn Omarchy”**, or **“Omarchy shortcuts”** for built-in guidance, clickable installed references, and the official manual. These answers work without a model; opening the online manual requires a connection.
@@ -62,11 +72,11 @@ A settled moment can prompt a short, useful command tip or an aside from the sel
 
 Ambient observation/generation pauses on battery, power saver, idle, lock, fullscreen, Do Not Disturb, quiet pause, hidden Wisp, or heavy CPU load. Unknown desktop/lock signals keep it quiet. Foreground chat cancels the ambient client; model calls share a lock, and background requests use two threads, a 30-second HTTP timeout and no model keep-alive. Results are discarded if power, consent or the foreground window changes. The shell suppresses asides during direct interaction with Wisp. Use **Pause 1h**, **Awareness off**, or **Privacy and data → Forget activity and thoughts** whenever wanted. Forgetting clears the diary, reflections and activity aggregates (including backups), preserving earned identity/XP and daily reward limits.
 
-**Commands** exposes the actual fixed action catalogue and missing executables. Common supported requests route directly without relying on model judgment, while more varied language uses the catalogue in the model prompt. Tools still require Run and report their actual result; the model cannot execute arbitrary commands. Workspace navigation uses the current Omarchy/Hyprland Lua dispatch API. Media controls use Omarchy’s native media service and report unhandled actions; no playerctl dependency is needed. Obsidian and Do Not Disturb are included when available.
+**Commands** exposes the actual fixed action catalogue and missing executables. Common supported requests route directly without relying on model judgment, while more varied language uses the catalogue in the model prompt. Commands require Run unless the separately enabled, narrow quick-action preference applies; the model cannot execute arbitrary commands. Workspace navigation uses the current Omarchy/Hyprland Lua dispatch API. Media controls use Omarchy’s native media service and report unhandled actions; no playerctl dependency is needed. Obsidian and Do Not Disturb are included when available.
 
 ## Command center (1.4)
 
-Open **Commands** directly from chat. Search by task or example, filter categories, and inspect what is available on your machine. Each card explains the action and gives a phrase to try. Themes and supported plugins from your personal bank appear alongside built-in controls. **Ctrl+F** focuses search; **↑/↓** browses results; **Enter** prepares the selected command. Preparation never executes it: review its readable name in chat, then **Run** or **Cancel**. Failed actions remain available to retry. The availability filter checks required executables, not attached hardware or guaranteed success.
+Open **Commands** directly from chat. Search by task or example, filter categories, and inspect what is available on your machine. Each card explains the action and gives a phrase to try. Themes and supported plugins from your personal bank appear alongside built-in controls. **Ctrl+F** focuses search; **↑/↓** browses results; **Enter** prepares the selected command. Preparation never executes it: review its readable name in chat, then **Run** or **Cancel**. Failed actions remain available to retry. Availability includes bounded connection probes for media and microphone controls; other controls may still fail at execution.
 
 New controls include window focus/swap/fullscreen/floating, workspaces 1–10 and moving windows between them, scratchpad, monitor focus, microphone mute, keyboard lighting, explicit night-light and Bluetooth states, screenshots/OCR/QR selection, and default-app menus. Window operations affect the window focused when Run is pressed; closing may prompt its app to save work. Native menu choices and asynchronous service requests report acceptance rather than claiming the requested downstream work is already complete.
 
@@ -130,7 +140,7 @@ Only discovered themes and supported enabled panels are valid targets; aliases c
 
 ### Mouse and activity responses (1.2)
 
-**More → Settings → Mouse and activity responses** has two independent opt-ins. Both require Awareness on and external power; new installations default to off.
+**More → Settings → Signal sources** has independent pointer-gesture and activity-response opt-ins. Both require Awareness on and external power; new installations default to off.
 
 - **Mouse gestures:** wiggle the pointer beside Wisp (within 260 logical pixels). Several substantial direction changes within 1.8 seconds produce a short playful tilt and expression, with a 20-second cooldown. Ordinary sweeps, tiny jitter and large monitor jumps are rejected. Reuses the existing cursor helper at most every 150 ms while active; it does not interfere with dragging or enable Follow mode.
 - **Activity responses:** after 45 seconds without a 12-second input pause, Wisp stops roaming and suppresses casual AI asides. A pause releases that quiet state. Returning after an observed minute of idle can produce a happy tilt, at most once every five minutes. This is general input activity, not typing detection, emotion inference, or a productivity score.
@@ -163,7 +173,7 @@ omarchy plugin add https://github.com/0xQuan93/omarchy-pixel-spirit.git --enable
 
 The bar’s small robot icon recalls the companion. If newly added QML components do not appear, run `omarchy restart shell`. This briefly reloads the shell.
 
-For a development checkout, `python3 install.py` copies user-owned plugin files and updates only its entries in `shell.json`, backing up changes. The installer does not install packages, download models, or enable screensaver integration automatically.
+For a development checkout, `python3 install.py` stages and validates a complete plugin generation, retains user-owned plugin additions and the prior generation, and updates only Wisp's entries in `shell.json`. The installer does not install packages, download models, or enable screensaver integration automatically. A managed personal overlay uses its own composed installer.
 
 ### Optional local AI and voice
 

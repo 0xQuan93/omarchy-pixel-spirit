@@ -85,9 +85,28 @@ class ReadbackTests(unittest.TestCase):
             self.assertEqual(status.reply('Is my sound muted?')['text'],
                              'The audio output is not muted.')
             run.return_value.stdout = 'unexpected'
-            self.assertIn('cannot read', status.reply('What is my volume?')['text'])
+            unknown = status.reply('What is my volume?')
+            self.assertIn('cannot read', unknown['text'])
+            self.assertEqual(unknown['evidence']['status'], 'unknown')
+            self.assertTrue(unknown['evidence']['unknownReason'])
             run.side_effect = subprocess.TimeoutExpired('wpctl', 2)
             self.assertIn('cannot read', status.reply('What is my volume?')['text'])
+
+    def test_fresh_evidence_names_source_and_expires(self):
+        with patch.object(status, 'read_output_volume', return_value=(35, False)):
+            first = status.reply('What is my volume?')
+        self.assertEqual(first['evidence']['sourceId'], 'desktop.audio-output')
+        self.assertEqual(first['evidence']['status'], 'verified')
+        self.assertEqual(first['evidence']['verification'], 'state')
+        self.assertEqual(first['evidence']['unknownReason'], '')
+        self.assertEqual(first['evidence']['expiresAtMs'] - first['evidence']['observedAtMs'],
+                         status.EVIDENCE_TTL_MS)
+        with patch.object(status, 'read_power_supplies', return_value={'batteries': [], 'external': True}):
+            absent = status.reply('What is my battery level?')
+            plugged = status.reply('Am I plugged in?')
+        self.assertEqual(absent['evidence']['status'], 'unknown')
+        self.assertEqual(plugged['evidence']['status'], 'verified')
+        self.assertEqual(plugged['evidence']['sourceId'], 'desktop.external-power')
 
     def test_power_profile_known_and_unavailable(self):
         with patch.object(status.subprocess, 'run') as run:

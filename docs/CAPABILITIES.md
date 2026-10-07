@@ -1,4 +1,4 @@
-# Wisp 2.0 capability contract
+# Wisp 2.2 capability contract
 
 Wisp resolves supported language into registered actions. The registry owns each
 control's source, operation, plan eligibility, availability explanation, and
@@ -19,15 +19,21 @@ Each action has:
 - `planSafe`: whether it can participate in a reviewed multi-step plan.
 - `verification`: `process`, `accepted`, or `state`.
 - A current `available` value and an `availabilityReason` when unavailable.
+- A bounded `readiness` reading with `installed`, `connected` (`true`, `false`,
+  or unknown), `actionable`, `reason`, `checkedAtMs`, and `expiresAtMs`.
 
 Unannotated actions are single-command only. Unknown metadata fields,
 unregistered actions, malformed targets, and cross-source combination rules
 are rejected. The registry imports no adapters from manifest strings.
 
-Availability establishes required software or a reviewed adapter check. It does
-not guarantee that hardware is attached, a service is responsive, or an operation
-will succeed. Runtime receipts remain necessary. Discovery separately checks
-whether a plugin supports a native open route and is enabled.
+Availability establishes required software or a reviewed adapter check. Media
+and microphone controls use short, read-only source probes. An unknown probe is
+not turned into a positive suggestion; a reviewed Run can still check again.
+The general catalogue checks installation only; opening Commands requests live
+readiness so ordinary conversation does not repeatedly poll stateful sources.
+Availability does not guarantee that a later operation will succeed. Runtime
+receipts remain necessary. Discovery separately checks whether a plugin supports
+a native open route and is enabled.
 
 ## Discovery and source isolation
 
@@ -50,7 +56,10 @@ and unreviewed toggles remain individual commands.
 ## Evidence and outcomes
 
 The normalized receipt has `ok`, `status`, `verification`, `sourceId`, `text`,
-`route: local`, and an empty `action`.
+`route: local`, an empty `action`, and an `evidence` object. Evidence carries
+`sourceId`, `sourceLabel`, `observedAtMs`, optional `expiresAtMs`, `status`,
+`verification`, and `unknownReason`. On-demand machine facts use the same
+display shape; an expired reading is shown as an earlier reading.
 
 | Evidence | Meaning |
 |---|---|
@@ -97,6 +106,18 @@ The cancellation decision and next-step claim are atomic. An execution lock
 prevents concurrent plans from interleaving. A process identity check marks a
 lost process interrupted; a restart never resumes or replays it.
 
+Saved routines contain only an existing plan's registered action IDs and
+fingerprints, with a short name. They never retain argv or a permission to Run.
+The shelf accepts at most 24 routines. Opening one rechecks its controls and
+creates a fresh five-minute, one-use plan; changed or removed controls require
+a new review and save.
+
+The optional quick-action preference defaults off. When enabled, only a complete
+authored request for a fixed volume step, speaker mute state, or playback state
+can use it. Media requires a confirmed controllable player. The broker still
+checks readiness and returns its ordinary evidence receipt. Model interpretations,
+personal aliases, compound plans, and consequential controls keep Run review.
+
 ## First run and upgrades
 
 Getting started describes local commands, discovery, review, and settings.
@@ -107,6 +128,11 @@ identities suppress an automatic introduction; it remains available from More.
 Existing growth metadata scanning and explicit room/identity behavior remain as
 documented in the README; the introduction does not change those defaults.
 Private machine adapters and earned identity remain separate from public code.
+Existing companions can open the optional What’s new tour; viewing a destination
+does not enable new signals. The [versioned transfer](STATE-TRANSFER.md) exports
+identity only by default and offers explicit growth, room, settings, notes, and
+chat selection. [Reviewed source adapters](ADAPTERS.md) have a separate schema
+and fresh fact checks.
 
 ## Validation
 

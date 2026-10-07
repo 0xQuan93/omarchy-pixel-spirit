@@ -147,8 +147,22 @@ def chat(message, eco=False, pending_plan="", learn=True, refresh=False):
   return {'text':text,'emote':'reading','action':'','route':'local'}
  action = quick_action
  if action:
-  info=controls().describe(action)
+  registry=controls()
+  info=registry.describe(action)
   if not info['available']:return {'text':info['availabilityReason'],'emote':'idle','action':'','route':'local'}
+  import interaction_policy
+  try: quick=interaction_policy.eligible(BASE,message,action,registry,info)
+  except (OSError,ValueError):quick=False
+  if quick:
+   try:data=execute(action)
+   except (OSError,ValueError,subprocess.SubprocessError) as error:
+    # An unsuccessful helper may already have requested a change. Preserve
+    # that uncertainty in the ordinary receipt instead of claiming success.
+    data=registry.receipt(action,{'text':'I could not confirm the quick action: '+str(error),
+                                  'error':str(error),'ok':False,'action':''})
+   data['quickAction']=True
+   save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(data)}])[-8:])
+   return data
   data = {'text':'Ready: '+LABELS[action]+'. Tap Run below.', 'emote':'playing' if action in ['play_pause','next_track'] else 'working','action':action,'actionLabel':LABELS[action],'route':'local'}
   save('history.json',(history+[{'role':'user','content':message},{'role':'assistant','content':json.dumps(data)}])[-8:])
   return data
@@ -288,7 +302,8 @@ def read_request(stream):
           'room':(1,3),'room_choose':(1,3),'growth':(1,1),'chat':(2,4),'learning':(3,4),
           'action':(2,2),'listen':(1,1),'speak':(2,2),'load':(1,1),
           'save':(2,2),'forget':(1,1),'restore':(1,1),'awareness':(1,3),'observe':(1,1),'reflect':(1,1),'setup':(2,2),'plan_status':(2,2),'plan_cancel':(2,2),'tools':(1,1),'input_gate':(1,1),'bubble_gate':(1,1),'bubble_receipt':(3,3),
-          'reminders':(1,1),'remind':(3,3),'cancel_reminder':(2,2)}
+          'reminders':(1,1),'remind':(3,3),'cancel_reminder':(2,2),
+          'routines':(1,4),'interaction':(1,3),'tour':(1,2)}
  bounds=arities.get(args[0])
  if bounds is None or not bounds[0]<=len(args)<=bounds[1]:
   raise ValueError('Invalid Wisp command or operand count.')
@@ -303,6 +318,28 @@ def main():
   if args[1]=='refresh' and len(args)==4 and args[3] in ('','eco'):
    return chat(learned_phrases.phrase(BASE,args[2]),args[3]=='eco',refresh=True)
   raise ValueError('Invalid learned phrase operation.')
+ if command=='routines':
+  import reviewed_routines
+  actions,labels,registry=plan_context()
+  if len(args)==1:return reviewed_routines.list_saved(BASE,registry)
+  if args[1]=='save' and len(args)==4:
+   return reviewed_routines.save_pending(BASE,args[2],args[3],registry)
+  if args[1]=='prepare' and len(args)==3:
+   return reviewed_routines.prepare(BASE,args[2],actions,labels,registry)
+  if args[1]=='remove' and len(args)==3:
+   return reviewed_routines.remove(BASE,args[2],registry)
+  raise ValueError('Invalid routine operation.')
+ if command=='interaction':
+  import interaction_policy
+  if len(args)==1:return interaction_policy.settings(BASE)
+  if len(args)==3 and args[1]=='fast_actions':
+   return interaction_policy.configure(BASE,args[2])
+  raise ValueError('Invalid interaction setting.')
+ if command=='tour':
+  import release_tour
+  if len(args)==1:return release_tour.status(BASE)
+  if args[1]=='seen':return release_tour.mark_seen(BASE)
+  raise ValueError('Invalid tour operation.')
  if command in ('reminders','remind','cancel_reminder'):
   import reminders
   if command=='reminders':return reminders.upcoming()
@@ -310,7 +347,11 @@ def main():
   return reminders.cancel(args[1])
  if command=='setup':
   import onboarding
-  if args[1]=='finish':onboarding.finish(BASE)
+  if args[1]=='finish':
+   onboarding.finish(BASE)
+   from release_tour import mark_seen
+   try:mark_seen(BASE)
+   except (OSError,ValueError):pass
   elif args[1]!='status':raise ValueError('Unknown setup operation.')
   return onboarding.status(BASE,catalogue(BASE,include_personal=True))
  if command in ('plan_status','plan_cancel'):
@@ -320,7 +361,13 @@ def main():
   import command_plans
   if command_plans.invalidate(BASE,args[1]):result['text']='Cancelled the pending plan.'
   return result
- if command=='tools':return {'tools':catalogue(BASE,include_personal=True)}
+ if command=='tools':
+  from native_guide import details, installed_routes
+  entries=catalogue(BASE,include_personal=True,probe_stateful=True)
+  routes=installed_routes()
+  for entry in entries:
+   entry.update(details(entry['id'],routes))
+  return {'tools':entries}
  if command=='bubble_gate':
   from awareness import bubble_gate
   return bubble_gate()
@@ -359,7 +406,12 @@ def main():
     try:reply=json.loads(item['content'])['text']
     except (ValueError,KeyError,TypeError):pass
     break
-  return {'onboarding':first_run,'planStatus':previous_plan,'planToken':previous_plan.get('token',''),'profile':p,'room':room,'growth':growth,'position':read('position.json',{}),
+  import interaction_policy
+  try:interaction=interaction_policy.settings(BASE)
+  except (OSError,ValueError):interaction={'version':1,'fastActions':False}
+  from release_tour import status as tour_status
+  return {'onboarding':first_run,'planStatus':previous_plan,'planToken':previous_plan.get('token',''),'profile':p,'room':room,'growth':growth,'position':read('position.json',{}),'interaction':interaction,
+          'tour':tour_status(BASE, existing=not first_run['showSetup']),
           'reply':reply,'recovered':sorted(RECOVERED),'awareness':__import__('awareness').status()}
  if command=='identity':
   from identity import profile

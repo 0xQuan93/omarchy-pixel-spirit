@@ -38,6 +38,17 @@ class CommandCatalogueTests(unittest.TestCase):
             self.assertEqual(result['route'], 'local')
             self.assertNotIn('unavailable theme', result['text'])
 
+    def test_offline_media_tip_requires_a_controllable_player(self):
+        entries = [{'id': 'play_music', 'label': 'Resume music',
+                    'available': True, 'examples': ['play music']}]
+        with patch('readiness.check', return_value={'suggestable': False}) as probe:
+            missing = command_catalog.offline_reply('play music', entries)
+        self.assertNotIn('Try:', missing['text'])
+        probe.assert_called_once()
+        with patch('readiness.check', return_value={'suggestable': True}):
+            active = command_catalog.offline_reply('play music', entries)
+        self.assertIn('Try: “play music”', active['text'])
+
     def test_percentage_chat_skips_model_discovery_and_execution(self):
         with patch('inference.request', side_effect=AssertionError('model requested')) as model, \
              patch.object(brain.command_routes, 'proposal', side_effect=AssertionError('discovery requested')), \

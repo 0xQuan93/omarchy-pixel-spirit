@@ -4,6 +4,7 @@ import re
 
 def decorate(entries, phrases):
     from desktop_commands import CATEGORIES, DESCRIPTIONS
+    from native_guide import details
     groups = {'browser':'Apps', 'terminal':'Apps', 'files':'Apps', 'notes':'Apps',
               'reminders':'Reminders', 'dnd_on':'Notifications', 'dnd_off':'Notifications',
               'power_saver':'Power', 'power_balanced':'Power'}
@@ -19,6 +20,7 @@ def decorate(entries, phrases):
         entry['examples'] = sorted(variants, key=lambda s: (len(s.split()),len(s),s))[:2]
         entry['phraseCount'] = len(variants)
         entry['description'] = DESCRIPTIONS.get(key, entry['label'] + ' using the desktop’s native control.')
+        entry.update(details(key, {}))
     return entries
 
 
@@ -43,13 +45,22 @@ def personal_entries(state_dir, bank=None):
 
 
 def offline_reply(message, entries):
+    from readiness import MEDIA_ACTIONS, MIC_ACTIONS, check
+    from capabilities import ACTIONS
     words = set(re.findall(r'[a-z0-9]+', message.casefold())) - {'the','my','a','to','please','can','you','i'}
     ranked = []
     for entry in entries:
         if not entry['available']: continue
         terms = set(re.findall(r'[a-z0-9]+',' '.join([entry['label'],*entry.get('examples',[])]).casefold()))
         score = len(words & terms)
-        if score: ranked.append((score,entry))
+        if not score: continue
+        action = entry['id']
+        if action in MEDIA_ACTIONS | MIC_ACTIONS and action in ACTIONS:
+            # A working executable alone does not establish a controllable
+            # player or microphone. Offline suggestions require a live source.
+            if not check(action, ACTIONS[action])['suggestable']:
+                continue
+        ranked.append((score,entry))
     ranked.sort(key=lambda pair:(-pair[0],pair[1]['label']))
     suggestions = [e['examples'][0] for _,e in ranked[:3] if e.get('examples')]
     text = 'Local conversation is unavailable right now. Desktop commands still work without AI.'

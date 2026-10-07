@@ -15,6 +15,24 @@ PanelWindow {
     property string page: "thoughts"
     property double now: Date.now()
     property bool paused: state.settings.quiet_until*1000>now
+    function sampledTime() {
+        return state.sampled > 0 ? new Date(state.sampled * 1000).toLocaleString() : "No sample yet"
+    }
+    function deliveredTime() {
+        return state.last_delivered > 0 ? new Date(state.last_delivered * 1000).toLocaleString() : "No suggestion or thought delivered yet"
+    }
+    function sourceState(enabled) {
+        if (!enabled) return "Off"
+        if (!state.settings.enabled) return "Waiting"
+        if (paused || !pluggedIn) return "Resting"
+        return "Enabled"
+    }
+    function revealSignal(item) {
+        var top = item.mapToItem(body, 0, 0).y
+        if (top < settingsViewport.contentY) settingsViewport.contentY = top
+        else if (top + item.height > settingsViewport.contentY + settingsViewport.height)
+            settingsViewport.contentY = Math.min(top + item.height - settingsViewport.height, Math.max(0, settingsViewport.contentHeight - settingsViewport.height))
+    }
     signal change(string setting,string value)
     signal propose(string action,string label)
     signal previewBubble()
@@ -51,6 +69,7 @@ PanelWindow {
                 onVisibleChanged: if (visible) Qt.callLater(focusSearch)
             }
             Flickable {
+                id: settingsViewport
                 visible: panel.page !== "tools"
                 width:parent.width;height:parent.height-48;clip:true;contentHeight:body.implicitHeight
                 boundsBehavior:Flickable.StopAtBounds
@@ -95,23 +114,65 @@ PanelWindow {
                             Action {text:panel.state.settings.enabled?"Awareness on":"Awareness off";selected:panel.state.settings.enabled;enabled:!panel.busy;onClicked:panel.change("enabled",panel.state.settings.enabled?"off":"on")}
                             Action {text:panel.paused?"Resume":"Pause 1h";enabled:!panel.busy;onClicked:panel.change(panel.paused?"resume":"pause","")}
                             Action {text:"Preview bubble";onClicked:panel.previewBubble()}
-                            Action {text:panel.state.settings.command_hints!==false?"Command tips on":"Command tips off";selected:panel.state.settings.command_hints!==false;enabled:!panel.busy;onClicked:panel.change("command_hints",panel.state.settings.command_hints!==false?"off":"on")}
                         }
                         Text {width:parent.width;text:panel.state.error||(!panel.state.settings.enabled?"Awareness is off.":panel.paused?"Paused until "+new Date(panel.state.settings.quiet_until*1000).toLocaleTimeString():!panel.pluggedIn?"Resting on battery.":panel.detail||"Ready for a quiet moment · bubbles at least 20 minutes apart");wrapMode:Text.Wrap;color:Color.accent;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
                         Disclosure {
-                            width:parent.width;title:"Mouse and activity responses";expanded:true
-                            Flow {width:body.width;spacing:6
-                                Action {text:panel.state.settings.mouse_gestures?"Mouse gestures on":"Mouse gestures off";selected:!!panel.state.settings.mouse_gestures;enabled:!panel.busy;onClicked:panel.change("mouse_gestures",panel.state.settings.mouse_gestures?"off":"on")}
-                                Action {text:panel.state.settings.activity_responses?"Activity responses on":"Activity responses off";selected:!!panel.state.settings.activity_responses;enabled:!panel.busy;onClicked:panel.change("activity_responses",panel.state.settings.activity_responses?"off":"on")}
+                            width:parent.width;title:"Signal sources";expanded:true
+                            SignalCard {
+                                width:body.width;title:"App and workspace"
+                                status:panel.sourceState(!!panel.state.settings.enabled);selected:!!panel.state.settings.enabled;busy:panel.busy
+                                detail:"Reads the active app name, broad category, and workspace for context, short thoughts, and sampled creative time. Fullscreen and private windows are skipped."
+                                retention:"Last snapshot, up to 32 app changes, sampled minutes, and up to 12 thoughts remain until cleared. No screenshots or typed text."
+                                last:"Last sample: "+panel.sampledTime()
+                                actionText:panel.state.settings.enabled?"Turn awareness off":"Turn awareness on"
+                                onRequested:panel.change("enabled",panel.state.settings.enabled?"off":"on")
+                                onFocusRequested:function(item){panel.revealSignal(item)}
                             }
-                            Text {width:body.width;text:"Wiggle the pointer beside me to say hello. During sustained activity I settle down; after a minute away I can greet your return. Awareness must be on.";wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body}
-                            Text {width:body.width;text:panel.inputSummary+"\nMovement samples last under two seconds. No keystrokes, saved pointer trails, AI calls or activity rewards.";wrapMode:Text.Wrap;color:Color.foreground;opacity:0.65;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                            SignalCard {
+                                width:body.width;title:"Window titles"
+                                status:panel.sourceState(!!panel.state.settings.titles);selected:!!panel.state.settings.titles;busy:panel.busy
+                                detail:"Adds the active title to app context when awareness samples. Titles may contain document names or URLs."
+                                retention:"A title may remain in the last snapshot, app changes, or generated thoughts. Turning this off clears saved titles and thoughts."
+                                last:"Last app sample: "+panel.sampledTime()
+                                actionText:panel.state.settings.titles?"Turn titles off":"Turn titles on"
+                                onRequested:panel.change("titles",panel.state.settings.titles?"off":"on")
+                                onFocusRequested:function(item){panel.revealSignal(item)}
+                            }
+                            SignalCard {
+                                width:body.width;title:"Command tips"
+                                status:panel.sourceState(panel.state.settings.command_hints!==false);selected:panel.state.settings.command_hints!==false;busy:panel.busy
+                                detail:"Uses the sampled app category to choose an authored Omarchy tip. A tip proposes a command for review; it never runs one."
+                                retention:"Delivered tips can remain in the bounded thoughts list until activity and thoughts are cleared."
+                                last:"Last bubble: "+panel.deliveredTime()
+                                actionText:panel.state.settings.command_hints!==false?"Turn tips off":"Turn tips on"
+                                onRequested:panel.change("command_hints",panel.state.settings.command_hints!==false?"off":"on")
+                                onFocusRequested:function(item){panel.revealSignal(item)}
+                            }
+                            SignalCard {
+                                width:body.width;title:"Pointer gestures"
+                                status:panel.sourceState(!!panel.state.settings.mouse_gestures);selected:!!panel.state.settings.mouse_gestures;busy:panel.busy
+                                detail:"Recognizes a small pointer wiggle near Wisp to greet you. Awareness and desktop quiet gates still apply."
+                                retention:"Movement samples last under two seconds. No pointer trail or trigger time is saved."
+                                last:"Last gesture: not separately retained"
+                                actionText:panel.state.settings.mouse_gestures?"Turn gestures off":"Turn gestures on"
+                                onRequested:panel.change("mouse_gestures",panel.state.settings.mouse_gestures?"off":"on")
+                                onFocusRequested:function(item){panel.revealSignal(item)}
+                            }
+                            SignalCard {
+                                width:body.width;title:"Activity rhythm"
+                                status:panel.sourceState(!!panel.state.settings.activity_responses);selected:!!panel.state.settings.activity_responses;busy:panel.busy
+                                detail:"Uses recent input activity to settle during work and greet your return after a pause. It does not read key contents."
+                                retention:"Recent input timing is transient. No keystrokes or trigger time is saved; it does not award activity growth."
+                                last:"Last response: not separately retained"
+                                actionText:panel.state.settings.activity_responses?"Turn responses off":"Turn responses on"
+                                onRequested:panel.change("activity_responses",panel.state.settings.activity_responses?"off":"on")
+                                onFocusRequested:function(item){panel.revealSignal(item)}
+                            }
+                            Text {width:body.width;text:panel.inputSummary;wrapMode:Text.Wrap;color:Color.foreground;opacity:0.7;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
                         }
                         Disclosure {
                             width:parent.width;title:"Privacy and data"
-                            Text {width:body.width;text:"App identity and workspace are used for context. No screenshots or typed text. Window titles can include document names and URLs.";wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body}
-                            Action {text:panel.state.settings.titles?"Window titles on":"Window titles off";selected:panel.state.settings.titles;enabled:!panel.busy;onClicked:panel.change("titles",panel.state.settings.titles?"off":"on")}
-                            Text {width:body.width;text:"Turning titles off also clears saved titles and old thoughts. Awareness rests when idle, locked, in fullscreen, on battery, in power saver or Do Not Disturb.";wrapMode:Text.Wrap;color:Color.foreground;opacity:0.65;font.family:Style.font.family;font.pixelSize:Style.font.bodySmall}
+                            Text {width:body.width;text:"Awareness rests when idle, locked, in fullscreen, on battery, in power saver or Do Not Disturb. Signals stay local. The source cards above show each control and its retention.";wrapMode:Text.Wrap;color:Color.foreground;font.family:Style.font.family;font.pixelSize:Style.font.body}
                             Action {text:"Forget activity and thoughts";enabled:!panel.busy;onClicked:panel.change("clear","")}
                             Text {text:"Keeps identity and earned growth.";color:Color.foreground;opacity:0.55;font.family:Style.font.family;font.pixelSize:Style.font.caption}
                         }
