@@ -42,6 +42,41 @@ class LearningIntegration(unittest.TestCase):
         self.assertEqual(len(brain.read('history.json',[])),4)
         self.effects.assert_not_called()
 
+    def test_live_machine_question_overrides_old_learned_answer_and_refreshes(self):
+        phrase = 'What is my current volume?'
+        ticket = learned.begin(self.base, phrase)
+        learned.complete(self.base, phrase, ticket,
+                         {'text': 'Your volume is 10%.', 'emote': 'reading', 'action': ''},
+                         brain.controls())
+        with patch('machine_status.read_output_volume', side_effect=[(35, False), (80, True)]) as reading:
+            first = brain.chat(phrase)
+            second = brain.chat(phrase)
+        self.assertEqual(first['route'], 'local')
+        self.assertEqual(first['text'], 'Output volume is 35%.')
+        self.assertEqual(second['text'], 'Output volume is 80%. It is muted.')
+        self.assertEqual(reading.call_count, 2)
+        self.assertNotIn('10%', first['text'] + second['text'])
+        self.assertFalse((self.base / 'history.json').exists())
+        self.model.assert_not_called()
+        self.effects.assert_not_called()
+
+    def test_other_live_machine_question_never_replays_or_learns_a_snapshot(self):
+        phrase = 'Is do not disturb on?'
+        ticket = learned.begin(self.base, phrase)
+        learned.complete(self.base, phrase, ticket,
+                         {'text': 'Do Not Disturb is off.', 'emote': 'reading', 'action': ''},
+                         brain.controls())
+        self.model.return_value = answer('I cannot verify the current notification state.')
+        first = brain.chat(phrase)
+        second = brain.chat(phrase)
+        self.assertEqual(first['route'], 'model')
+        self.assertEqual(second['route'], 'model')
+        self.assertNotIn('Do Not Disturb is off.', first['text'] + second['text'])
+        self.assertNotIn('learnedKind', first)
+        self.assertNotIn('learnedKind', second)
+        self.assertEqual(self.model.call_count, 2)
+        self.effects.assert_not_called()
+
     def test_action_repeat_is_fresh_run_proposal_not_execution(self):
         self.model.return_value=answer(action='mute')
         phrase='Would you help silence this machine?'

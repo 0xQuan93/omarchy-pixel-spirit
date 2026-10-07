@@ -154,6 +154,13 @@ def chat(message, eco=False, pending_plan="", learn=True, refresh=False):
   return data
  local_reply=local_intent(message)
  if local_reply:return local_reply
+ # Current machine readings must win over old exact-request snapshots. The
+ # on-demand reader never stores a sampled value or asks the model to infer it.
+ from machine_status import reply as machine_status_reply, requires_freshness
+ local_reply=machine_status_reply(message)
+ if local_reply:return local_reply
+ if requires_freshness(message):
+  learn=False
  if learn and not refresh:
   learned=learned_phrases.lookup(BASE,message,controls())
   if learned:

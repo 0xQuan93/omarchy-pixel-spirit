@@ -9,6 +9,14 @@ requests when they reach model fallback; it does not import old chat history.
 A complete text reply becomes a **Saved local AI reply**, with its original date.
 Repeating the request returns that snapshot before building model context or
 calling inference. It is not refreshed machine state or a newly verified fact.
+Explicit questions about current output volume or mute, power profile, battery
+charge, charging, or external power now use an on-demand local readback before
+this lookup. Even an older saved answer for one of those questions is not shown
+on repeat. These readings are not written to the learned bank or chat history.
+Some other explicit live machine questions, such as current Do Not Disturb or
+connection state, also bypass saved replies; the optional model may say it lacks
+a verified reading. Wisp does not treat explanations or past-tense questions as
+live status requests.
 **Ask again** explicitly requests a fresh reply. **Forget phrase** removes the
 entry; the next unknown request can be learned afresh. Both controls also appear
 on the first learned result.

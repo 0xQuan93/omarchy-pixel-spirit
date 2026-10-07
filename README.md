@@ -20,6 +20,8 @@ When an ordinary chat request reaches the local model, Wisp saves that exact req
 
 The bank holds up to 512 requests, within 4 MiB, on this computer only. It preserves case, punctuation, and internal whitespace when matching; it does not guess new aliases from similar sentences. Clear chat clears recent conversation while keeping learned phrases. Internal room/name choices, background reflection, and private creative-generation workflows retain their own behavior. See [learning and resource details](docs/LEARNED-PHRASES.md).
 
+Clear current-state questions such as **“What is my current volume?”**, **“Is my sound muted?”**, **“What is my power profile?”**, and **“How much battery do I have?”** use fresh, read-only local checks. They work without a model or awareness opt-in and do not become replayed learned answers. Wisp identifies an unavailable reading or absent battery instead of guessing. Volume and mute refer to the default audio output; battery and external-power details come from this machine’s power-supply records. These checks run only when asked.
+
 <p><img src="assets/omarchy-help.png" alt="Built-in Omarchy help with clickable local references" width="360"> <img src="assets/learned-reply.png" alt="Dated saved answer with Ask again and Forget phrase controls" width="360"></p>
 
 ## Wisp 2.0 — local tasks, clear results
