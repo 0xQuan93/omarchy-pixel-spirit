@@ -70,7 +70,7 @@ Item {
     property bool commentAllowed: senseAllowed && !!ToplevelManager.activeToplevel && !ToplevelManager.activeToplevel.fullscreen && !inputs.focused && !opened && !roomOpen && !setupOpen && !identityOpen && !awarenessOpen && !remindersOpen && !routinesOpen && !tourOpen && !speaker.busy && !pending
     property bool reflectionDue: false
     onCommentAllowedChanged: {
-        if(!commentAllowed){reflection.cancel();asideVisible=false}
+        if(!commentAllowed){reflection.cancel();asideVisible=false;pendingAgentSignal=""}
         else if(reflectionDue && !asideVisible && !reflection.busy){reflectionDue=false;reflection.run(["reflect"])}
     }
     IdleMonitor {id:presenceIdle;timeout:180;respectInhibitors:false}
@@ -330,6 +330,30 @@ Item {
         asideVisible=true;asideDismiss.restart()
         if(asideId)bubbleGate.run(["bubble_gate"])
     }
+    function presentAgentSignal(source, status) {
+        // This IPC accepts only fixed local facts. No caller text reaches the bubble.
+        var messages={
+            "codex:needs_input":"Codex needs your input. Review its pending request.",
+            "codex:finished":"Codex finished a turn. Its result is ready to review.",
+            "herdr:needs_input":"An agent in Herdr needs your input.",
+            "herdr:finished":"An agent in Herdr finished its work.",
+            "cli:test":"Agent signal connection test."
+        }
+        var message=messages[source+":"+status]
+        if(!message)return "invalid"
+        if(!commentAllowed)return "quiet"
+        if(agentSignalGate.busy)return "busy"
+        pendingAgentSignal=message
+        agentSignalGate.run(["bubble_gate"])
+        return "accepted"
+    }
+    property string pendingAgentSignal: ""
+    function showAgentSignal(message) {
+        asideVisible=false;asidePreview=false;asideId="";asideAcknowledged=false
+        asideAction="";asideActionLabel="";asideSource="Local agent signal"
+        asideBasis="Fixed local status event";asideText=message
+        asideVisible=true;asideDismiss.restart()
+    }
     function reviewBubbleAction() {
         var action=asideAction,label=asideActionLabel
         if(!action)return
@@ -370,6 +394,7 @@ Item {
         function settings(): void {root.showPanel("settings")}
         function reminders(): void {root.showPanel("reminders")}
         function previewBubble(): void {root.previewBubble()}
+        function agentSignal(source: string, status: string): string {return root.presentAgentSignal(source,status)}
         function dismiss(): void {root.showPanel("");root.asideVisible=false}
         function room(): void {root.showPanel(root.roomOpen?"":"room")}
         function roam(mode: string): void {if(["stay","roam","follow"].indexOf(mode)>=0){root.movement=mode;root.persist()}}
@@ -468,6 +493,10 @@ Item {
                 root.asideAcknowledged=true;root.acknowledgeBubble(candidate,"displayed")
             }
         })
+    }}
+    Call {id:agentSignalGate;onReceived:function(d){
+        var message=root.pendingAgentSignal;root.pendingAgentSignal=""
+        if(message && d.allowed && root.commentAllowed)root.showAgentSignal(message)
     }}
     Timer {interval:5000;running:root.asideVisible && !root.asidePreview;repeat:true;onTriggered:if(!bubbleGate.busy)bubbleGate.run(["bubble_gate"])}
     Timer {id:asideDismiss;interval:Math.min(30000,Math.max(14000,root.asideText.length*65));onTriggered:root.asideVisible=false}

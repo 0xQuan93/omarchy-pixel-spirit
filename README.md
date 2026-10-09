@@ -136,6 +136,12 @@ Optional personal aliases belong in the separate `personal-command-bank.json`, w
 
 Only discovered themes and supported enabled panels are valid targets; aliases cannot supply commands or arguments. These example targets must exist on your own machine. This bank is local to each installation and is not shipped or synced with Wisp. No new daemon, cloud service, or package dependency is added.
 
+## Local agent status bubbles (2.2)
+
+Reviewed local adapters can offer Wisp a fixed status through `omarchy shell pixel-spirit agentSignal <source> <status>`. The supported pairs are `codex` or `herdr` with `needs_input` or `finished`; `cli test` checks the connection. Wisp returns `accepted` while it checks the live desktop gate, or `quiet`, `busy`, or `invalid` without showing a bubble. Acceptance does not promise display. Wisp owns the wording and accepts no caller-supplied message, transcript, command, or approval decision. This path makes no model call and stores no agent content.
+
+Bubbles appear beside Wisp only while its normal awareness and comment gate is open. Hidden, idle, quiet, battery-saving, locked, DND, fullscreen, or busy states suppress them; optional activity focus sensing also suppresses them when enabled. The event is dropped without a native notification or later queue. An adapter must detect real state transitions and respect its own connection settings. Wisp does not install or enable Codex hooks or a Herdr watcher.
+
 ## Mouse, activity and reminders
 
 ### Mouse and activity responses (1.2)
