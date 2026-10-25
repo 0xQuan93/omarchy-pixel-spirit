@@ -84,6 +84,13 @@ class ReadbackTests(unittest.TestCase):
             run.return_value.stdout = 'Volume: 0.80\n'
             self.assertEqual(status.reply('Is my sound muted?')['text'],
                              'The audio output is not muted.')
+            run.return_value.stdout = 'Volume: 0,35 [MUTED]\n'
+            self.assertEqual(status.reply('What is my volume?')['text'],
+                             'Output volume is 35%. It is muted.')
+            self.assertEqual(status.reply('What is my volume?')['evidence']['status'], 'verified')
+            run.return_value.stdout = 'Volume: 0,80\n'
+            self.assertEqual(status.reply('Is my sound muted?')['text'],
+                             'The audio output is not muted.')
             run.return_value.stdout = 'unexpected'
             unknown = status.reply('What is my volume?')
             self.assertIn('cannot read', unknown['text'])
