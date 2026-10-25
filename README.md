@@ -293,7 +293,7 @@ The restored idle clone remains installed. The restore tool refuses to overwrite
 
 ## Development
 
-Input/reminder validation: `python3 -m unittest discover -q` and `node test_input_rhythm.js`. The JavaScript tests exercise the same transient detector used in QML: gesture rejection, cooldowns, bounded storage, continuous-activity thresholds, idle returns and missing-sample gaps.
+Input/reminder validation: `python3 -m unittest discover -q`, `node test_input_rhythm.js`, and `node test_agent_signal_ipc.js`. The rhythm test exercises the same transient detector used in QML: gesture rejection, cooldowns, bounded storage, continuous-activity thresholds, idle returns and missing-sample gaps. The agent-signal test exercises the fixed local status decision in `Desktop.qml` without starting a desktop shell.
 
 ```sh
 python3 -m unittest discover -s . -v
