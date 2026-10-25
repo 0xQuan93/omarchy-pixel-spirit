@@ -6,12 +6,16 @@ from growth import STATE, get, put
 ACTIVITIES={'rest','read','play','garden'}
 def default():return {'bond':0,'day':'','earned':[],'activity':'rest','notes':[],'message':'A little room between the pixels.'}
 def note_text(value):
- if value.startswith('file:'):
+ # Only a dropped file URL is read from disk. Typed notes may start with "file:".
+ if value.startswith('file://'):
   url=urlparse(value)
   if url.netloc not in ('','localhost'):raise ValueError('Drop a local text note.')
   path=Path(unquote(url.path))
   if path.is_symlink() or path.suffix.lower() not in ('.md','.txt') or not path.is_file():raise ValueError('Drop a small .txt or .md file, or plain text.')
-  with path.open() as f:value=f.read(4097)
+  try:
+   with path.open() as f:value=f.read(4097)
+  except UnicodeError as error:
+   raise ValueError('Drop a small .txt or .md file, or plain text.') from error
  if len(value)>4096:raise ValueError('Keep notes under 4096 characters.')
  value=value.strip()
  if not value:raise ValueError('That note was empty.')
