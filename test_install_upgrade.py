@@ -1,5 +1,5 @@
 """Exercise staged development installs in a temporary home."""
-import contextlib,io,json,os,runpy,subprocess,sys,tempfile,unittest
+import contextlib,getpass,io,json,os,runpy,subprocess,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parent
@@ -127,4 +127,49 @@ class InstallUpgrade(unittest.TestCase):
    self.assertEqual(outside.read_text(),'protected')
    self.assertTrue((target/'manifest.json').is_symlink())
    self.assertEqual(shell.read_bytes(),old_shell)
+
+ def _shell(self, home):
+  config=home/'.config/omarchy';config.mkdir(parents=True)
+  shell=config/'shell.json'
+  shell.write_text(json.dumps({'bar':{'layout':{'left':[{'id':'example.clock'},{'id':'oxquan.pixel-spirit'}],'right':[]}},'plugins':[{'id':'example.clock'},{'id':'oxquan.pixel-spirit'}]}))
+  return shell
+
+ def _remove(self, home):
+  with patch.dict(os.environ,{'HOME':str(home)}),patch.object(sys,'argv',['install.py','--remove']),contextlib.redirect_stdout(io.StringIO()) as out:
+   runpy.run_path(str(ROOT/'install.py'),run_name='__main__')
+  return out.getvalue()
+
+ def test_remove_restores_our_idle_launcher_and_clears_shell(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   home=Path(tmp);shell=self._shell(home)
+   idle=home/'.config/omarchy/plugins'/f'{getpass.getuser()}.idle';idle.mkdir(parents=True)
+   original='runProcess("label", "false || omarchy-launch-screensaver")'
+   (idle/'Service.qml').write_text(original)
+   (idle/'.wisp-screensaver.json').write_text(json.dumps({'original':original,'modified':original}))
+   subprocess.run([sys.executable,str(ROOT/'setup_screensaver.py')],env=dict(os.environ,HOME=tmp),check=True,capture_output=True)
+   self.assertNotEqual((idle/'Service.qml').read_text(),original)
+   message=self._remove(home)
+   self.assertEqual((idle/'Service.qml').read_text(),original)
+   self.assertFalse((idle/'.wisp-screensaver.json').exists())
+   self.assertIn('removed from shell configuration',message)
+   data=json.loads(shell.read_text())
+   self.assertEqual([item['id'] for item in data['plugins']],['example.clock'])
+   self.assertEqual([item['id'] for item in data['bar']['layout']['left']],['example.clock'])
+
+ def test_remove_keeps_an_edited_idle_clone_and_still_clears_shell(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   home=Path(tmp);shell=self._shell(home)
+   idle=home/'.config/omarchy/plugins'/f'{getpass.getuser()}.idle';idle.mkdir(parents=True)
+   original='runProcess("label", "false || omarchy-launch-screensaver")'
+   edited=original+'\n// user customization'
+   (idle/'Service.qml').write_text(edited)
+   (idle/'.wisp-screensaver.json').write_text(json.dumps({'original':original,'modified':original}))
+   message=self._remove(home)
+   self.assertEqual((idle/'Service.qml').read_text(),edited)
+   self.assertTrue((idle/'.wisp-screensaver.json').exists())
+   self.assertIn('left unchanged',message)
+   self.assertIn('removed from shell configuration',message)
+   data=json.loads(shell.read_text())
+   self.assertEqual([item['id'] for item in data['plugins']],['example.clock'])
+   self.assertEqual([item['id'] for item in data['bar']['layout']['left']],['example.clock'])
 if __name__=='__main__':unittest.main()

@@ -213,13 +213,30 @@ def probe_host():
     }
 
 
+def _retire_screensaver():
+    """Restore Wisp's dream-room launcher when it is still the one we wrote.
+
+    A later edit to the idle clone is left untouched. Removing Wisp from the
+    shell still proceeds; that clone is a separate user-owned plugin.
+    """
+    result = subprocess.run([sys.executable, str(source / 'setup_screensaver.py'), '--remove'],
+                            capture_output=True, text=True)
+    message = '\n'.join(part.strip() for part in (result.stdout, result.stderr) if part and part.strip())
+    if result.returncode == 0:
+        if message:
+            print(message)
+        return
+    print(message or 'The dream-room launcher was not restored.')
+    print('The idle clone was left unchanged. Wisp will still be removed from the shell configuration.')
+
+
 def main():
     if '--check-host' in sys.argv:
         print(json.dumps(probe_host(), indent=2))
         return
     remove = '--remove' in sys.argv
     if remove:
-        subprocess.run([sys.executable, str(source / 'setup_screensaver.py'), '--remove'], check=True)
+        _retire_screensaver()
     data = _shell_data()
     if not remove:
         data['plugins'].append({'id': 'oxquan.pixel-spirit'})

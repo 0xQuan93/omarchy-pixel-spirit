@@ -289,7 +289,7 @@ omarchy plugin remove oxquan.pixel-spirit
 omarchy restart shell
 ```
 
-The restored idle clone remains installed. The restore tool refuses to overwrite subsequent edits to it. Private companion state and the separately downloaded model are retained for deliberate cleanup. For a copied development install, use `python3 install.py --remove` instead of the plugin removal command.
+The restored idle clone remains installed. The restore tool refuses to overwrite subsequent edits to it. Private companion state and the separately downloaded model are retained for deliberate cleanup. For a copied development install, use `python3 install.py --remove` instead of the plugin removal command. That command still removes Wisp from the shell when the idle clone was edited later; it leaves the clone unchanged and prints the restore refusal.
 
 ## Development
 
