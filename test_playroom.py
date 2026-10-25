@@ -18,8 +18,11 @@ class RoomTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as tmp:
    path=Path(tmp)/'note.txt';path.write_text('remember the garden')
    self.assertEqual(p.note_text(path.as_uri()),'remember the garden')
+   self.assertEqual(p.note_text('file: remember the garden'),'file: remember the garden')
+   self.assertEqual(p.note_text('file:/not-a-dropped-url.txt'),'file:/not-a-dropped-url.txt')
    link=Path(tmp)/'link.txt';link.symlink_to(path)
-   for value in [link.as_uri(),'file://remote/note.txt','x'*4097,'']:
+   bad=Path(tmp)/'bad.txt';bad.write_bytes(b'\xff\xfehello')
+   for value in [link.as_uri(),'file://remote/note.txt',bad.as_uri(),'x'*4097,'']:
     with self.assertRaises(ValueError):p.note_text(value)
  def test_notes_bounded_and_clear_preserves_bond(self):
   with tempfile.TemporaryDirectory() as tmp,patch.object(p,'STATE',Path(tmp)):
