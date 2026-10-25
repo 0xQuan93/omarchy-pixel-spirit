@@ -56,10 +56,11 @@ def execute(action):
     try:
         result = subprocess.run(['wpctl', 'get-volume', '@DEFAULT_AUDIO_SINK@'],
                                 capture_output=True, text=True, timeout=2, check=True)
-        match = re.fullmatch(r'Volume:\s+(\d+(?:\.\d+)?)(?:\s+\[MUTED\])?\s*', result.stdout)
+        # wpctl prints %.2f in the process locale, so the mark may be a comma.
+        match = re.fullmatch(r'Volume:\s+(\d+(?:[.,]\d+)?)(?:\s+\[MUTED\])?\s*', result.stdout)
     except (OSError, subprocess.SubprocessError):
         return failed('The volume command finished, but I could not confirm the requested level.')
-    if not match or abs(Decimal(match[1]) - Decimal(amount) / 100) > Decimal('0.005'):
+    if not match or abs(Decimal(match[1].replace(',', '.')) - Decimal(amount) / 100) > Decimal('0.005'):
         return failed('The volume command finished, but the requested level was not confirmed. Check Sound settings.')
     return {'text': f'Volume confirmed at {amount}%.', 'action': '',
             'emote': 'working', 'route': 'local', 'ok': True,

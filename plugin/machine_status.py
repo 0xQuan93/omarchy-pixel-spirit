@@ -70,7 +70,9 @@ _OTHER_LIVE_QUESTIONS = tuple(re.compile(pattern) for pattern in (
     r"what(?: is|'s) (?:my|the) (?:current )?(?:wifi|wi-fi|internet|network) (?:status|state)",
     r"what app is (?:active|focused|open)",
 ))
-_VOLUME = re.compile(r'Volume:\s+(\d+(?:\.\d+)?)(?:\s+(\[MUTED\]))?\s*')
+# wpctl prints this with printf %.2f, which follows LC_NUMERIC. A comma is a
+# decimal mark in those locales, not a thousands separator.
+_VOLUME = re.compile(r'Volume:\s+(\d+(?:[.,]\d+)?)(?:\s+(\[MUTED\]))?\s*')
 
 
 def _question(message):
@@ -111,7 +113,7 @@ def read_output_volume():
     match = _VOLUME.fullmatch(value) if value is not None else None
     if not match:
         return None
-    level = float(match[1])
+    level = float(match[1].replace(',', '.'))
     if level > 10:
         return None
     return round(level * 100), bool(match[2])
