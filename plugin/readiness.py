@@ -15,7 +15,8 @@ MEDIA_ACTIONS = frozenset({'pause_music', 'play_music', 'play_pause',
 MIC_ACTIONS = frozenset({'mic_mute', 'mic_unmute'})
 MAX_STATUS_BYTES = 8192
 PROBE_TIMEOUT = 1
-_VOLUME = re.compile(r'Volume:\s+\d+(?:\.\d+)?(?:\s+\[MUTED\])?\s*')
+# wpctl's %.2f follows LC_NUMERIC, so a comma can be the decimal mark.
+_VOLUME = re.compile(r'Volume:\s+\d+(?:[.,]\d+)?(?:\s+\[MUTED\])?\s*')
 
 
 def _media_status():

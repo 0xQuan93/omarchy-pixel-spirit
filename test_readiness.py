@@ -56,6 +56,13 @@ class ReadinessTests(unittest.TestCase):
         self.assertTrue(unknown['actionable'])
         self.assertIn('could not be checked', unknown['reason'])
 
+    def test_microphone_probe_accepts_locale_decimal_comma(self):
+        with patch.object(readiness.subprocess, 'run') as run:
+            run.return_value.stdout = 'Volume: 0,40 [MUTED]\n'
+            self.assertTrue(readiness._microphone_present())
+            run.return_value.stdout = 'Volume: 1.000,40\n'
+            self.assertFalse(readiness._microphone_present())
+
     def test_missing_tool_does_not_probe_and_malformed_status_fails_unknown(self):
         with patch.object(readiness.shutil, 'which', return_value=None), \
              patch.object(readiness, '_media_status') as probe:

@@ -32,12 +32,21 @@ class DesktopVerificationTests(unittest.TestCase):
             with self.subTest(action=action):
                 self.assertFalse(verify(action, invoke=invoke))
 
+    def test_locale_decimal_comma_still_confirms_mute_state(self):
+        for action, muted in (('mute', True), ('unmute', False),
+                              ('mic_mute', True), ('mic_unmute', False)):
+            with self.subTest(action=action):
+                invoke = Mock(return_value=subprocess.CompletedProcess([], 0,
+                    'Volume: 0,43' + (' [MUTED]' if muted else '') + '\n'))
+                self.assertTrue(verify(action, invoke=invoke))
+
     def test_malformed_audio_readbacks_fail_closed(self):
         samples = ('', 'error: no such node', 'Volume: unknown', 'Volume: -1.00',
                    'Volume: NaN [MUTED]', 'Volume: 0.30 [MUTE]',
                    'Volume: 0.30 [MUTED]\nVolume: 0.50',
                    'node 12 Volume: 0.30 [MUTED]',
-                   'Volume: 0.30 [MUTED] extra', '{"muted":true}')
+                   'Volume: 0.30 [MUTED] extra', '{"muted":true}',
+                   'Volume: 1.000,43 [MUTED]')
         for action in ('mute', 'unmute', 'mic_mute', 'mic_unmute'):
             for sample in samples:
                 with self.subTest(action=action, sample=sample):

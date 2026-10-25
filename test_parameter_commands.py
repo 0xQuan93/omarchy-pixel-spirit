@@ -37,11 +37,11 @@ class PercentageControls(unittest.TestCase):
     call(['wpctl','get-volume','@DEFAULT_AUDIO_SINK@'],capture_output=True,text=True,timeout=2,check=True)])
    self.assertTrue(reply['verified']);self.assertEqual(reply['status'],'verified')
  def test_volume_readback_tolerance_and_muted_level(self):
-  for value in ('0.245','0.255','0.25 [MUTED]'):
+  for value in ('0.245','0.255','0.25 [MUTED]','0,25','0,255 [MUTED]'):
    with self.subTest(value=value),patch.object(controls.shutil,'which',return_value='/tool'),patch.object(controls.subprocess,'run',return_value=SimpleNamespace(stdout='Volume: '+value)):
     self.assertTrue(controls.execute('param:volume:25')['verified'])
  def test_volume_mismatch_and_malformed_readback_fail(self):
-  for output in ('Volume: 0.2449','Volume: 0.2551','Volume: 0.90','ok','Volume: nan','Volume: 0.25 unexpected'):
+  for output in ('Volume: 0.2449','Volume: 0.2551','Volume: 0.90','ok','Volume: nan','Volume: 0.25 unexpected','Volume: 0,244','Volume: 1.000,25'):
    with self.subTest(output=output),patch.object(controls.shutil,'which',return_value='/tool'),patch.object(controls.subprocess,'run',return_value=SimpleNamespace(stdout=output)):
     reply=controls.execute('param:volume:25')
     self.assertFalse(reply['ok']);self.assertFalse(reply['verified']);self.assertEqual(reply['status'],'failed')
